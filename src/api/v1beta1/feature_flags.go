@@ -53,6 +53,7 @@ const (
 	AnnotationFeatureDisableReadOnlyOneAgent      = AnnotationFeaturePrefix + "disable-oneagent-readonly-host-fs"
 	AnnotationFeatureEnableMultipleOsAgentsOnNode = AnnotationFeaturePrefix + "multiple-osagents-on-node"
 	AnnotationFeatureOneAgentIgnoreProxy          = AnnotationFeaturePrefix + "oneagent-ignore-proxy"
+	AnnotationFeatureOneAgentPrivileged           = AnnotationFeaturePrefix + "oneagent-privileged"
 	AnnotationFeatureOneAgentInitialConnectRetry  = AnnotationFeaturePrefix + "oneagent-initial-connect-retry-ms"
 
 	// injection (webhook)
@@ -95,6 +96,10 @@ func (dk *DynaKube) FeatureOneAgentMaxUnavailable() int {
 // This disables instrumenting containers injected by other webhooks following the admission to the Operator's webhook.
 func (dk *DynaKube) FeatureDisableWebhookReinvocationPolicy() bool {
 	return dk.getFeatureFlagRaw(AnnotationFeatureDisableWebhookReinvocationPolicy) == "true"
+}
+
+func (dk *DynaKube) FeatureOneAgentPrivileged() bool {
+	return dk.getFeatureFlagRaw(AnnotationFeatureOneAgentPrivileged) == "true"
 }
 
 // FeatureIgnoreUnknownState is a feature flag that makes the operator inject into applications even when the dynakube is in an UNKNOWN state,

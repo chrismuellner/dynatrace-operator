@@ -278,6 +278,9 @@ func (dsInfo *builderInfo) unprivilegedSecurityContext() *corev1.SecurityContext
 			},
 		},
 	}
+	if dsInfo.instance.FeatureOneAgentPrivileged() {
+		securityContext.Privileged = address.Of(true)
+	}
 	if dsInfo.instance.NeedsReadOnlyOneAgents() {
 		unprivilegedUser := int64(1000)
 		unprivilegedGroup := int64(1000)
