@@ -116,7 +116,7 @@ jobs:
   build-amd64:
     name: Build amd64 docker image
     needs: [prepare]
-    uses: ./.github/workflows/build-dockerimage.yaml
+    uses: ./.github/actions/build-dockerimage.yaml
     with:
       platform: amd64
       goversion: ${{ needs.prepare.outputs.goversion }}
@@ -127,7 +127,7 @@ jobs:
   build-arm64:
     name: Build arm64 docker image
     needs: [prepare]
-    uses: ./.github/workflows/build-dockerimage.yaml
+    uses: ./.github/actions/build-dockerimage.yaml
     if: ${{ contains(github.ref, 'refs/tags/v') || contains(github.ref, 'refs/heads/master') || contains(github.ref, 'refs/heads/release-') }}
     with:
       platform: arm64
@@ -140,7 +140,7 @@ jobs:
     name: Upload amd64 image
     needs: [tests,linting,prepare,build-amd64]
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
-    uses: ./.github/workflows/upload-dockerimage.yaml
+    uses: ./.github/actions/upload-dockerimage.yaml
     with:
       platform: amd64
       labels: ${{ needs.prepare.outputs.labels }}
@@ -157,7 +157,7 @@ jobs:
     if: |
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) &&
       (contains(github.ref, 'refs/tags/v') || contains(github.ref, 'refs/heads/master') || contains(github.ref, 'refs/heads/release-'))
-    uses: ./.github/workflows/upload-dockerimage.yaml
+    uses: ./.github/actions/upload-dockerimage.yaml
     with:
       platform: arm64
       labels: ${{ needs.prepare.outputs.labels }}

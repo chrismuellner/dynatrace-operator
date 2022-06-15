@@ -33,18 +33,13 @@ jobs:
         platform: [amd64, arm64]
     steps:
       - name: Build image for ${{matrix.platform}}
-        uses: ./.github/workflows/build-dockerimage.yaml
+        uses: ./.github/actions/build-dockerimage.yaml
         with:
           platform: ${{matrix.platform}}
           goversion: ${{ needs.prepare.outputs.goversion }}
           goargs: ${{ needs.prepare.outputs.goargs }}
           labels: ${{ needs.prepare.outputs.labels }}
           image-tag: ${{ needs.prepare.outputs.version }}
-
-  preflight_job:
-    name: Validate with RedHat preflight tool
-    runs-on: ubuntu-latest
-
 
   push:
     name: Push images
@@ -73,7 +68,7 @@ jobs:
             password: ${{ secrets.DOCKERHUB_PASSWORD }}
     steps:
       - name: Push ${{matrix.platform}} to ${{matrix.registry}}
-        uses: ./.github/workflows/upload-dockerimage.yaml
+        uses: ./.github/actions/upload-dockerimage.yaml
         with:
           platform: ${{matrix.platform}}
           labels: ${{ needs.prepare.outputs.labels }}
@@ -128,7 +123,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run
-        uses: ./.github/workflows/preflight.yaml
+        uses: ./.github/actions/preflight.yaml
         with:
           image_name: quay.io/dynatrace/dynatrace-operator:snapshot-amd64
 
