@@ -32,8 +32,8 @@ jobs:
     needs: [prepare]
     with:
       platform: amd64
-      goversion: ${{ needs.prep.outputs.goversion }}
-      goargs: ${{ needs.prep.outputs.goargs }}
+      goversion: ${{ needs.prepare.outputs.goversion }}
+      goargs: ${{ needs.prepare.outputs.goargs }}
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
