@@ -30,16 +30,11 @@ jobs:
     name: Build images
     needs: [prepare]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [amd64, arm64]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build image for ${{matrix.platform}}
+      - name: Build quay image
         uses: ./.github/workflows/build-dockerimage.yaml
         with:
-          platform: ${{matrix.platform}}
+          platform: amd64,arm64
           goversion: ${{ needs.prepare.outputs.goversion }}
           goargs: ${{ needs.prepare.outputs.goargs }}
           labels: ${{ needs.prepare.outputs.labels }}
@@ -49,39 +44,17 @@ jobs:
     environment: Release
     needs: [prepare,build]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [amd64, arm64]
-        registry: [rhcc] #, gcr, dockerhub]
-        include:
-          - registry: rhcc
-            url: quay.io
-            repository: dynatrace/dynatrace-operator
-            username_secret: DOCKERHUB_USERNAME
-            password_secret: DOCKERHUB_PASSWORD
-          # - registry: gcr
-          #   url: gcr.io
-          #   repository: dynatrace-marketplace-prod/dynatrace-operator
-          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
-          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          # - registry: dockerhub
-          #   url: docker.io
-          #   repository: dynatrace/dynatrace-operator
-          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
-          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Push ${{matrix.platform}} to ${{matrix.registry}}
+      - name: Push quay image
         uses: ./.github/workflows/upload-dockerimage.yaml
         with:
-          platform: ${{matrix.platform}}
+          platform: amd64,arm64
           labels: ${{ needs.prepare.outputs.labels }}
           version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ matrix.url }}
-          repository: ${{ matrix.repository }}
-          docker_repo_username: ${{ secrets[matrix.username_secret] }}
-          docker_repo_password: ${{ secrets[matrix.password_secret] }}
+          registry: quay.io
+          repository: dynatrace/dynatrace-operator
+          docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
+          docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
             
 
