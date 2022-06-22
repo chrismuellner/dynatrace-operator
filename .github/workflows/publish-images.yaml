@@ -65,7 +65,7 @@ jobs:
   push-dockerhub-arm:
     name: Push arm image to Dockerhub
     uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [prepare, build-amd]
+    needs: [prepare, build-arm]
     with:
       platform: arm64
       labels: ${{ needs.prepare.outputs.labels }}
@@ -78,7 +78,7 @@ jobs:
 
   manifest:
     name: Create manifests
-    needs: [prepare, push]
+    needs: [prepare, push-dockerhub-amd, push-dockerhub-arm]
     runs-on: ubuntu-latest
     strategy:
       matrix:
