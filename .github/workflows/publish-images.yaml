@@ -31,7 +31,7 @@ jobs:
     name: Build images
     needs: [prepare]
     with:
-      platform: amd64,arm64
+      platform: amd64
       goversion: ${{ needs.prepare.outputs.goversion }}
       goargs: ${{ needs.prepare.outputs.goargs }}
       labels: ${{ needs.prepare.outputs.labels }}
@@ -45,7 +45,7 @@ jobs:
       - name: Push quay image
         uses: ./.github/workflows/upload-dockerimage.yaml
         with:
-          platform: amd64,arm64
+          platform: amd64
           labels: ${{ needs.prepare.outputs.labels }}
           version: ${{ needs.prepare.outputs.version }}
           registry: quay.io
