@@ -40,8 +40,6 @@ COPY --from=k8s.gcr.io/sig-storage/livenessprobe:v2.7.0 /livenessprobe /usr/loca
 COPY --from=dependency-src /bin/mount /bin/umount /bin/
 COPY --from=dependency-src /lib64/libmount.so.1 /lib64/libblkid.so.1 /lib64/libuuid.so.1 /lib64/
 
-COPY ./third_party_licenses /usr/share/dynatrace-operator/third_party_licenses
-
 LABEL name="Dynatrace Operator" \
       vendor="Dynatrace LLC" \
       maintainer="Dynatrace LLC" \
