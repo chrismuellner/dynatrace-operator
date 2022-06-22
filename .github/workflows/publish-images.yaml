@@ -20,7 +20,7 @@ jobs:
           hack/build/ci/prepare-build-variables.sh
     outputs:
       labels: ${{ steps.prep.outputs.docker_image_labels }}
-      version: ${{ steps.prep.outputs.docker_image_tag }}
+      version: test
       goargs: ${{ steps.prep.outputs.go_build_args }}
       goversion: ${{ steps.prepenv.outputs.goversion }}
 
