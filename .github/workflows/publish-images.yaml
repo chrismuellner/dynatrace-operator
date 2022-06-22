@@ -88,13 +88,13 @@ jobs:
           - registry: rhcc
             url: quay.io
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.RHCC_USERNAME }}
-            password: ${{ secrets.RHCC_PASSWORD }}
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
           - registry: gcr
             url: quay.io
             repository: dynatrace/dynatrace-operator
-            username: ${{ secrets.GCR_USERNAME }}
-            password: ${{ secrets.GCR_PASSWORD }}
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
           - registry: dockerhub
             url: quay.io
             repository: dynatrace/dynatrace-operator
