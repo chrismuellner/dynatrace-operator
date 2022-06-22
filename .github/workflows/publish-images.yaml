@@ -20,9 +20,9 @@ jobs:
           hack/build/ci/prepare-build-variables.sh
     outputs:
       labels: ${{ steps.prep.outputs.docker_image_labels }}
-      version: test
+      version: ${{ steps.prep.outputs.docker_image_tag }}
       goargs: ${{ steps.prep.outputs.go_build_args }}
-      goversion: ${{ steps.prepenv.outputs.goversion }}
+      goversion: "1.18"
 
   # Workflow needs to build docker images again as separate workflows don't have access to others artifacts
   # https://github.com/actions/download-artifact/issues/3
@@ -32,8 +32,8 @@ jobs:
     needs: [prepare]
     with:
       platform: amd64
-      goversion: ${{ needs.prepare.outputs.goversion }}
-      goargs: ${{ needs.prepare.outputs.goargs }}
+      goversion: ${{ needs.prep.outputs.goversion }}
+      goargs: ${{ needs.prep.outputs.goargs }}
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
@@ -44,7 +44,7 @@ jobs:
     with:
       platform: amd64
       labels: ${{ needs.prepare.outputs.labels }}
-      version: test
+      version: ${{ needs.prepare.outputs.version }}
       registry: quay.io
       repository: dynatrace/dynatrace-operator
     secrets:
