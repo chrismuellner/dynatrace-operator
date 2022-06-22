@@ -86,11 +86,11 @@ func NewStatefulSetProperties(instance *dynatracev1beta1.DynaKube, capabilityPro
 }
 
 func CreateStatefulSet(stsProperties *statefulSetProperties) (*appsv1.StatefulSet, error) {
-
-	versionLabelValue := stsProperties.Status.ActiveGate.Version
-	if stsProperties.DynaKube.Spec.ActiveGate.Image != "" {
-		versionLabelValue = stsProperties.DynaKube.Spec.ActiveGate.Image
+	versionLabelValue := stsProperties.CustomActiveGateImageTag()
+	if versionLabelValue == "" {
+		versionLabelValue = stsProperties.Status.ActiveGate.Version
 	}
+
 	appLabels := kubeobjects.NewAppLabels(kubeobjects.ActiveGateComponentLabel, stsProperties.DynaKube.Name,
 		stsProperties.feature, versionLabelValue)
 

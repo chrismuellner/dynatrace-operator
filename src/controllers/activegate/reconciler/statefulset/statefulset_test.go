@@ -21,7 +21,8 @@ import (
 
 const (
 	testName                 = "test-name"
-	testImage                = "test-image"
+	testImageTag             = "tag"
+	testImage                = "test-image:" + testImageTag
 	testNamespace            = "test-namespace"
 	testKey                  = "test-key"
 	testValue                = "test-value"
@@ -93,7 +94,7 @@ func TestStatefulSetBuilder_Build(t *testing.T) {
 			kubeobjects.AppNameLabel:      kubeobjects.ActiveGateComponentLabel,
 			kubeobjects.AppCreatedByLabel: instance.Name,
 			kubeobjects.AppComponentLabel: testComponentFeature,
-			kubeobjects.AppVersionLabel:   testImage,
+			kubeobjects.AppVersionLabel:   testImageTag,
 			kubeobjects.AppManagedByLabel: version.AppName,
 		}
 		expectedMatchLabels := map[string]string{

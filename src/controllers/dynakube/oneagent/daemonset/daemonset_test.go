@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	testImage   = "test-image"
-	testVersion = "test-version"
+	testImageTag = "tag"
+	testImage    = "test-image:" + testImageTag
+	testVersion  = "test-version"
 )
 
 func TestUseImmutableImage(t *testing.T) {
@@ -117,7 +118,7 @@ func TestLabels(t *testing.T) {
 			kubeobjects.AppNameLabel:      kubeobjects.OneAgentComponentLabel,
 			kubeobjects.AppCreatedByLabel: instance.Name,
 			kubeobjects.AppComponentLabel: feature,
-			kubeobjects.AppVersionLabel:   testImage,
+			kubeobjects.AppVersionLabel:   testImageTag,
 			kubeobjects.AppManagedByLabel: version.AppName,
 		}
 		expectedMatchLabels := map[string]string{

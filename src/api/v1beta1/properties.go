@@ -153,6 +153,14 @@ func (dk *DynaKube) ActiveGateImage() string {
 	return resolveImagePath(newActiveGateImagePath(dk))
 }
 
+func (dk *DynaKube) CustomActiveGateImage() string {
+	return newActiveGateImagePath(dk).CustomImagePath()
+}
+
+func (dk *DynaKube) CustomActiveGateImageTag() string {
+	return getImageTag(newActiveGateImagePath(dk).CustomImagePath())
+}
+
 // EecImage returns the Extension Controller image to be used with the dk DynaKube instance.
 func (dk *DynaKube) EecImage() string {
 	return resolveImagePath(newEecImagePath(dk))
@@ -183,7 +191,7 @@ func (dk *DynaKube) NeedAppInjection() bool {
 	return dk.CloudNativeFullstackMode() || dk.ApplicationMonitoringMode()
 }
 
-func (dk *DynaKube) Image() string {
+func (dk *DynaKube) CustomOneAgentImage() string {
 	if dk.ClassicFullStackMode() {
 		return dk.Spec.OneAgent.ClassicFullStack.Image
 	} else if dk.HostMonitoringMode() {
@@ -192,6 +200,10 @@ func (dk *DynaKube) Image() string {
 		return dk.Spec.OneAgent.CloudNativeFullStack.Image
 	}
 	return ""
+}
+
+func (dk *DynaKube) CustomOneAgentImageTag() string {
+	return getImageTag(dk.CustomOneAgentImage())
 }
 
 func (dk *DynaKube) CodeModulesImage() string {
@@ -254,7 +266,7 @@ func (dynakube DynaKube) CodeModulesVersion() string {
 	}
 	if dynakube.CodeModulesImage() != "" {
 		codeModulesImage := dynakube.CodeModulesImage()
-		return strings.Split(codeModulesImage, ":")[1]
+		return getImageTag(codeModulesImage)
 	}
 	if dynakube.Version() != "" && !dynakube.CloudNativeFullstackMode() {
 		return dynakube.Version()
@@ -268,7 +280,7 @@ func (dk *DynaKube) NamespaceSelector() *metav1.LabelSelector {
 
 // ImmutableOneAgentImage returns the immutable OneAgent image to be used with the dk DynaKube instance.
 func (dk *DynaKube) ImmutableOneAgentImage() string {
-	oneAgentImage := dk.Image()
+	oneAgentImage := dk.CustomOneAgentImage()
 	if oneAgentImage != "" {
 		return oneAgentImage
 	}
@@ -386,4 +398,11 @@ func splitArg(arg string) (key, value string) {
 	key = split[0]
 	value = split[1]
 	return
+}
+
+func getImageTag(imageURI string) string {
+	if !strings.Contains(imageURI, ":") {
+		return ""
+	}
+	return strings.Split(imageURI, ":")[1]
 }
