@@ -31,6 +31,8 @@ jobs:
     needs: [prepare]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Build quay image
         uses: ./.github/workflows/build-dockerimage.yaml
         with:
@@ -42,7 +44,7 @@ jobs:
   push:
     name: Push images
     environment: Release
-    needs: [prepare,build]
+    needs: [build]
     runs-on: ubuntu-latest
     steps:
       - name: Push quay image
