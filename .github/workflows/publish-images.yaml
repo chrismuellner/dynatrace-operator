@@ -40,7 +40,7 @@ jobs:
   push:
     name: Push images
     uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [build]
+    needs: [prepare, build]
     with:
       platform: amd64
       labels: ${{ needs.prepare.outputs.labels }}
