@@ -86,17 +86,17 @@ jobs:
         registry: [ rhcc, gcr, dockerhub ]
         include:
           - registry: rhcc
-            url: registry.connect.redhat.com
+            url: quay.io
             repository: dynatrace/dynatrace-operator
             username: ${{ secrets.RHCC_USERNAME }}
             password: ${{ secrets.RHCC_PASSWORD }}
           - registry: gcr
-            url: gcr.io
-            repository: dynatrace-marketplace-prod/dynatrace-operator
+            url: quay.io
+            repository: dynatrace/dynatrace-operator
             username: ${{ secrets.GCR_USERNAME }}
             password: ${{ secrets.GCR_PASSWORD }}
           - registry: dockerhub
-            url: docker.io
+            url: quay.io
             repository: dynatrace/dynatrace-operator
             username: ${{ secrets.DOCKERHUB_USERNAME }}
             password: ${{ secrets.DOCKERHUB_PASSWORD }}
@@ -113,6 +113,6 @@ jobs:
         # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
         # two more steps instead of two more lines
         run: |          
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-amd64
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-arm64
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-amd64
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-arm64
           hack/build/ci/create-manifest.sh "${IMAGE}" "${{ needs.prepare.outputs.version }}" true
