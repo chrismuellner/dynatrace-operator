@@ -27,8 +27,8 @@ jobs:
   # Workflow needs to build docker images again as separate workflows don't have access to others artifacts
   # https://github.com/actions/download-artifact/issues/3
   build:
-    uses: ./.github/workflows/build-dockerimage.yaml
     name: Build images
+    uses: ./.github/workflows/build-dockerimage.yaml
     needs: [prepare]
     with:
       platform: amd64
@@ -36,22 +36,19 @@ jobs:
       goargs: ${{ needs.prepare.outputs.goargs }}
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
+
   push:
     name: Push images
-    environment: Release
+    uses: ./.github/workflows/upload-dockerimage.yaml
     needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Push quay image
-        uses: ./.github/workflows/upload-dockerimage.yaml
-        with:
-          platform: amd64
-          labels: ${{ needs.prepare.outputs.labels }}
-          version: ${{ needs.prepare.outputs.version }}
-          registry: quay.io
-          repository: dynatrace/dynatrace-operator
-          docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
-          docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+    with:
+      platform: amd64
+      labels: ${{ needs.prepare.outputs.labels }}
+      version: ${{ needs.prepare.outputs.version }}
+      registry: quay.io
+      repository: dynatrace/dynatrace-operator
+      docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
             
 
