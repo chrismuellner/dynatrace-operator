@@ -26,8 +26,8 @@ jobs:
 
   # Workflow needs to build docker images again as separate workflows don't have access to others artifacts
   # https://github.com/actions/download-artifact/issues/3
-  build:
-    name: Build images
+  build-amd:
+    name: Build amd image
     uses: ./.github/workflows/build-dockerimage.yaml
     needs: [prepare]
     with:
@@ -37,10 +37,21 @@ jobs:
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
-  push:
-    name: Push images
+  build-arm:
+    name: Build arm image
+    uses: ./.github/workflows/build-dockerimage.yaml
+    needs: [prepare]
+    with:
+      platform: arm64
+      goversion: ${{ needs.prepare.outputs.goversion }}
+      goargs: ${{ needs.prepare.outputs.goargs }}
+      labels: ${{ needs.prepare.outputs.labels }}
+      image-tag: ${{ needs.prepare.outputs.version }}
+
+  push-dockerhub-amd:
+    name: Push amd image to Dockerhub
     uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [prepare, build]
+    needs: [prepare, build-amd]
     with:
       platform: amd64
       labels: ${{ needs.prepare.outputs.labels }}
@@ -51,44 +62,56 @@ jobs:
       docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
       docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-            
+  push-dockerhub-arm:
+    name: Push arm image to Dockerhub
+    uses: ./.github/workflows/upload-dockerimage.yaml
+    needs: [prepare, build-amd]
+    with:
+      platform: arm64
+      labels: ${{ needs.prepare.outputs.labels }}
+      version: ${{ needs.prepare.outputs.version }}
+      registry: quay.io
+      repository: dynatrace/dynatrace-operator
+    secrets:
+      docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
+      docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-  # manifest:
-  #   name: Create manifests
-  #   needs: [prepare, push]
-  #   runs-on: ubuntu-latest
-  #   strategy:
-  #     matrix:
-  #       registry: [ rhcc, gcr, dockerhub ]
-  #       include:
-  #         - registry: rhcc
-  #           url: quay.io
-  #           repository: dynatrace/dynatrace-operator
-  #           username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-  #         - registry: gcr
-  #           url: quay.io
-  #           repository: dynatrace/dynatrace-operator
-  #           username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-  #         - registry: dockerhub
-  #           url: quay.io
-  #           repository: dynatrace/dynatrace-operator
-  #           username: ${{ secrets.DOCKERHUB_USERNAME }}
-  #           password: ${{ secrets.DOCKERHUB_PASSWORD }}
-  #   steps:
-  #     - name: Login to ${{matrix.repository}}
-  #       uses: docker/login-action@v1
-  #       with:
-  #         registry: ${{ matrix.url }}
-  #         username: ${{ matrix.username }}
-  #         password: ${{ matrix.password }}
-  #     - name: Create manifest for ${{matrix.repository}}
-  #       env:
-  #         IMAGE: ${{matrix.url}}/${{matrix.repository}}
-  #       # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
-  #       # two more steps instead of two more lines
-  #       run: |          
-  #         docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-amd64
-  #         docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-arm64
-  #         hack/build/ci/create-manifest.sh "${IMAGE}" "${{ needs.prepare.outputs.version }}" true
+  manifest:
+    name: Create manifests
+    needs: [prepare, push]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        registry: [ dockerhub ] #[  rhcc, gcr, dockerhub ]
+        include:
+          # - registry: rhcc
+          #   url: quay.io
+          #   repository: dynatrace/dynatrace-operator
+          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
+          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          # - registry: gcr
+          #   url: quay.io
+          #   repository: dynatrace/dynatrace-operator
+          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
+          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          - registry: dockerhub
+            url: quay.io
+            repository: dynatrace/dynatrace-operator
+            username: ${{ secrets.DOCKERHUB_USERNAME }}
+            password: ${{ secrets.DOCKERHUB_PASSWORD }}
+    steps:
+      - name: Login to ${{matrix.repository}}
+        uses: docker/login-action@v1
+        with:
+          registry: ${{ matrix.url }}
+          username: ${{ matrix.username }}
+          password: ${{ matrix.password }}
+      - name: Create manifest for ${{matrix.repository}}
+        env:
+          IMAGE: ${{matrix.url}}/${{matrix.repository}}
+        # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
+        # two more steps instead of two more lines
+        run: |          
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-amd64
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-arm64
+          hack/build/ci/create-manifest.sh "${IMAGE}" "${{ needs.prepare.outputs.version }}" true
