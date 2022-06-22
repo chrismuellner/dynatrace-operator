@@ -27,20 +27,15 @@ jobs:
   # Workflow needs to build docker images again as separate workflows don't have access to others artifacts
   # https://github.com/actions/download-artifact/issues/3
   build:
+    uses: ./.github/workflows/build-dockerimage.yaml
     name: Build images
     needs: [prepare]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-      - name: Build quay image
-        uses: ./.github/workflows/build-dockerimage.yaml
-        with:
-          platform: amd64,arm64
-          goversion: ${{ needs.prepare.outputs.goversion }}
-          goargs: ${{ needs.prepare.outputs.goargs }}
-          labels: ${{ needs.prepare.outputs.labels }}
-          image-tag: ${{ needs.prepare.outputs.version }}
+    with:
+      platform: amd64,arm64
+      goversion: ${{ needs.prepare.outputs.goversion }}
+      goargs: ${{ needs.prepare.outputs.goargs }}
+      labels: ${{ needs.prepare.outputs.labels }}
+      image-tag: ${{ needs.prepare.outputs.version }}
   push:
     name: Push images
     environment: Release
