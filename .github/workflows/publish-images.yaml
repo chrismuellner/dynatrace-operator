@@ -53,7 +53,7 @@ jobs:
         registry: [rhcc] #, gcr, dockerhub]
         include:
           - registry: rhcc
-            url: registry.connect.redhat.com
+            url: quay.io
             repository: dynatrace/dynatrace-operator
             username_secret: DOCKERHUB_USERNAME
             password_secret: DOCKERHUB_PASSWORD
@@ -76,9 +76,10 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ matrix.url }}
           repository: ${{ matrix.repository }}
-        secrets:
           docker_repo_username: ${{ secrets[matrix.username_secret] }}
           docker_repo_password: ${{ secrets[matrix.password_secret] }}
+
+            
 
   # manifest:
   #   name: Create manifests
