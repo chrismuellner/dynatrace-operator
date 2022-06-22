@@ -51,11 +51,11 @@ jobs:
   push-dockerhub-amd:
     name: Push amd image to Dockerhub
     uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [prepare, build-amd]
+    needs: [build-amd]
     with:
       platform: amd64
-      labels: ${{ needs.prepare.outputs.labels }}
-      version: ${{ needs.prepare.outputs.version }}
+      labels: ${{ jobs.prepare.outputs.labels }}
+      version: ${{ jobs.prepare.outputs.version }}
       registry: quay.io
       repository: dynatrace/dynatrace-operator
     secrets:
@@ -65,11 +65,11 @@ jobs:
   push-dockerhub-arm:
     name: Push arm image to Dockerhub
     uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [prepare, build-arm]
+    needs: [build-arm]
     with:
       platform: arm64
-      labels: ${{ needs.prepare.outputs.labels }}
-      version: ${{ needs.prepare.outputs.version }}
+      labels: ${{ jobs.prepare.outputs.labels }}
+      version: ${{ jobs.prepare.outputs.version }}
       registry: quay.io
       repository: dynatrace/dynatrace-operator
     secrets:
@@ -78,7 +78,7 @@ jobs:
 
   manifest:
     name: Create manifests
-    needs: [prepare, push-dockerhub-amd, push-dockerhub-arm]
+    needs: [push-dockerhub-amd, push-dockerhub-arm]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -112,9 +112,10 @@ jobs:
       - name: Create manifest for ${{matrix.repository}}
         env:
           IMAGE: ${{matrix.url}}/${{matrix.repository}}
+          VERSION: ${{ jobs.prepare.outputs.version }}
         # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
         # two more steps instead of two more lines
         run: |          
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-amd64
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${{ needs.prepare.outputs.version }}-${{ matrix.registry }}-arm64
-          hack/build/ci/create-manifest.sh "${IMAGE}" "${{ needs.prepare.outputs.version }}" true
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${ VERSION }-${{ matrix.registry }}-amd64
+          docker pull ${{matrix.url}}/${{matrix.repository}}:${ VERSION }-${{ matrix.registry }}-arm64
+          hack/build/ci/create-manifest.sh "${IMAGE}" "${ VERSION }" true
