@@ -89,7 +89,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       - name: Create manifest for Dockerhub
         env:
-          IMAGE: quay.io/dynatrace-operator
+          IMAGE: quay.io/dynatrace/dynatrace-operator
           VERSION: ${{ needs.prepare.outputs.version }}
         # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
         # two more steps instead of two more lines
