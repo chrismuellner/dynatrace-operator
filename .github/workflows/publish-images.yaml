@@ -37,16 +37,16 @@ jobs:
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
-  build-arm:
-    name: Build arm image
-    uses: ./.github/workflows/build-dockerimage.yaml
-    needs: [prepare]
-    with:
-      platform: arm64
-      goversion: ${{ needs.prepare.outputs.goversion }}
-      goargs: ${{ needs.prepare.outputs.goargs }}
-      labels: ${{ needs.prepare.outputs.labels }}
-      image-tag: ${{ needs.prepare.outputs.version }}
+  # build-arm:
+  #   name: Build arm image
+  #   uses: ./.github/workflows/build-dockerimage.yaml
+  #   needs: [prepare]
+  #   with:
+  #     platform: arm64
+  #     goversion: ${{ needs.prepare.outputs.goversion }}
+  #     goargs: ${{ needs.prepare.outputs.goargs }}
+  #     labels: ${{ needs.prepare.outputs.labels }}
+  #     image-tag: ${{ needs.prepare.outputs.version }}
 
   push-dockerhub-amd:
     name: Push amd image to Dockerhub
@@ -62,60 +62,37 @@ jobs:
       docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
       docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
-  push-dockerhub-arm:
-    name: Push arm image to Dockerhub
-    uses: ./.github/workflows/upload-dockerimage.yaml
-    needs: [prepare, build-arm]
-    with:
-      platform: arm64
-      labels: ${{ needs.prepare.outputs.labels }}
-      version: ${{ needs.prepare.outputs.version }}
-      registry: quay.io
-      repository: dynatrace/dynatrace-operator
-    secrets:
-      docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
-      docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
+  # push-dockerhub-arm:
+  #   name: Push arm image to Dockerhub
+  #   uses: ./.github/workflows/upload-dockerimage.yaml
+  #   needs: [prepare, build-arm]
+  #   with:
+  #     platform: arm64
+  #     labels: ${{ needs.prepare.outputs.labels }}
+  #     version: ${{ needs.prepare.outputs.version }}
+  #     registry: quay.io
+  #     repository: dynatrace/dynatrace-operator
+  #   secrets:
+  #     docker_repo_username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #     docker_repo_password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
   manifest:
     name: Create manifests
-    needs: [prepare, push-dockerhub-amd, push-dockerhub-arm]
+    needs: [prepare, push-dockerhub-amd]
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        registry: [ dockerhub ] #[  rhcc, gcr, dockerhub ]
-        include:
-          # - registry: rhcc
-          #   url: quay.io
-          #   repository: dynatrace/dynatrace-operator
-          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
-          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          # - registry: gcr
-          #   url: quay.io
-          #   repository: dynatrace/dynatrace-operator
-          #   username: ${{ secrets.DOCKERHUB_USERNAME }}
-          #   password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          - registry: dockerhub
-            url: quay.io
-            repository: dynatrace/dynatrace-operator
-            username_secret: DOCKERHUB_USERNAME
-            password_secret: DOCKERHUB_PASSWORD
     steps:
-      - name: Login to ${{matrix.repository}}
+      - name: Login to Dockerhub
         uses: docker/login-action@v1
-        env:
-          USERNAME: ${{ secrets[matrix.username_secret] }}
-          PASSWORD: ${{ secrets[matrix.password_secret] }}
         with:
-          registry: ${{ matrix.url }}
-          username: ${ USERNAME }
-          password: ${ PASSWORD }
-      - name: Create manifest for ${{matrix.repository}}
+          registry: ${{ needs.prepare.outputs.registry }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Create manifest for Dockerhub
         env:
-          IMAGE: ${{matrix.url}}/${{matrix.repository}}
+          IMAGE: quay.io/dynatrace-operator
           VERSION: ${{ needs.prepare.outputs.version }}
         # Simply pulls, otherwise the artifact would need to be re-downloaded and re-tagged correctly which would mean
         # two more steps instead of two more lines
         run: |          
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${ VERSION }-${{ matrix.registry }}-amd64
-          docker pull ${{matrix.url}}/${{matrix.repository}}:${ VERSION }-${{ matrix.registry }}-arm64
-          hack/build/ci/create-manifest.sh "${IMAGE}" "${ VERSION }" true
+          docker pull ${IMAGE}:${VERSION}-amd64
+          hack/build/ci/create-manifest.sh "${IMAGE}" "${VERSION}" false
