@@ -6,6 +6,7 @@ on:
       - v[0-9]+.[0-9]+.[0-9]+
 
 jobs:
+
   prepare:
     name: Prepare properties
     runs-on: ubuntu-latest
@@ -16,11 +17,23 @@ jobs:
         id: prep
         run: |
           hack/build/ci/prepare-build-variables.sh
+      - name: Prepare build parameters
+        id: prepenv
+        run: |
+          # Set output parameters.
+          # Reason: global envs do not work in workflow calls
+          # More info: https://github.com/actions/runner/issues/480#issuecomment-1021278915
+          echo ::set-output name=goversion::${{ env.GO_VERSION }}
+          echo ::set-output name=registry::${{ env.DOCKER_REGISTRY }}
+          echo ::set-output name=repository::${{ env.DOCKER_REPOSITORY }}
     outputs:
       labels: ${{ steps.prep.outputs.docker_image_labels }}
       version: ${{ steps.prep.outputs.docker_image_tag }}
-      goargs: ${{ steps.prep.outputs.go_build_args }}
-      goversion: "1.18"
+      golinkerargs: ${{ steps.prep.outputs.go_linker_args }}
+      cgo_cflags: ${{ steps.prep.outputs.cgo_cflags }}
+      goversion: "^1.18"
+      registry: ${{ steps.prepenv.outputs.registry }}
+      repository: ${{ steps.prepenv.outputs.repository }}
 
   # Workflow needs to build docker images again as separate workflows don't have access to others artifacts
   # https://github.com/actions/download-artifact/issues/3
@@ -31,7 +44,8 @@ jobs:
     with:
       platform: amd64
       goversion: ${{ needs.prepare.outputs.goversion }}
-      goargs: ${{ needs.prepare.outputs.goargs }}
+      golinkerargs: ${{ needs.prepare.outputs.golinkerargs }}
+      cgo_cflags: ${{ needs.prepare.outputs.cgo_cflags }}
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
@@ -42,7 +56,8 @@ jobs:
     with:
       platform: arm64
       goversion: ${{ needs.prepare.outputs.goversion }}
-      goargs: ${{ needs.prepare.outputs.goargs }}
+      golinkerargs: ${{ needs.prepare.outputs.golinkerargs }}
+      cgo_cflags: ${{ needs.prepare.outputs.cgo_cflags }}
       labels: ${{ needs.prepare.outputs.labels }}
       image-tag: ${{ needs.prepare.outputs.version }}
 
