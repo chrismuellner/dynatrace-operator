@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: read
+  # packages: write
+  # id-token: write
 
 jobs:
 
@@ -146,3 +148,18 @@ jobs:
           combined: true
           repository-username: ${{ secrets[matrix.username] }}
           repository-password: ${{ secrets[matrix.password] }}
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@main
+      - name: Sign image with a key
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
+        env:
+          TAGS: ${{ matrix.url }}${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}
+          COSIGN_PRIVATE_KEY: ${{secrets.COSIGN_PRIVATE_KEY}}
+          COSIGN_PASSWORD: ${{secrets.COSIGN_PASSWORD}}
+
+      # - name: Sign the images with GitHub OIDC Token **not production ready**
+      #   run: cosign sign ${TAGS}
+      #   env:
+      #     TAGS: ${{ steps.docker_meta.outputs.tags }}
+      #     COSIGN_EXPERIMENTAL: true
