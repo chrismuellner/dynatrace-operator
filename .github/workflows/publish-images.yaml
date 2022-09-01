@@ -154,12 +154,12 @@ jobs:
         run: |
           cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
         env:
-          TAGS: ${{ matrix.url }}${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}
+          TAGS: ${{ matrix.url }}/${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}
           COSIGN_PRIVATE_KEY: ${{secrets.COSIGN_PRIVATE_KEY}}
           COSIGN_PASSWORD: ${{secrets.COSIGN_PASSWORD}}
 
-      # - name: Sign the images with GitHub OIDC Token **not production ready**
-      #   run: cosign sign ${TAGS}
-      #   env:
-      #     TAGS: ${{ steps.docker_meta.outputs.tags }}
-      #     COSIGN_EXPERIMENTAL: true
+      - name: Sign the images with GitHub OIDC Token **not production ready**
+        run: cosign sign ${TAGS}
+        env:
+          TAGS: ${{ matrix.url }}/${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}
+          COSIGN_EXPERIMENTAL: true
