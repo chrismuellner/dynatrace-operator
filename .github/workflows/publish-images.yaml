@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  # packages: write
   id-token: write
 
 jobs:
@@ -80,7 +79,7 @@ jobs:
           #   repository: RHCC_REPOSITORY
           #   username: RHCC_USERNAME
           #   password: RHCC_PASSWORD
-          - registry-name: gcr
+          - registry-name: gcr # todo: same names as create manifest matrix
             registry-url: gcr.io
             repository: GCR_REPOSITORY
             username: GCR_USERNAME
@@ -93,6 +92,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+      - name: Login to Registry
+        uses:  docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        with:
+          registry: ${{ matrix.url }}
+          username: ${{ secrets[matrix.username] }}
+          password: ${{ secrets[matrix.password] }}
       - name: Push ${{matrix.platform}} to ${{matrix.registry-name}}
         uses: ./.github/actions/upload-image
         if: matrix.registry-name != 'rhcc' || ( matrix.registry-name == 'rhcc' && matrix.platform == 'amd64' )
@@ -100,10 +105,8 @@ jobs:
           platform: ${{ matrix.platform }}
           labels: ${{ needs.prepare.outputs.labels }}
           version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ matrix.registry-url }}
+          registry: ${{ matrix.registry-url }} # todo: only pass in image -> docker login step happens outside of action
           repository: ${{ secrets[matrix.repository] }}
-          repository-username: ${{ secrets[matrix.username] }}
-          repository-password: ${{ secrets[matrix.password] }}
       # - name: Run preflight
       #   if: matrix.registry-name == 'rhcc' && matrix.platform == 'amd64'
       #   uses: ./.github/actions/preflight
@@ -116,43 +119,15 @@ jobs:
       #     pyxis-api-token: ${{ secrets.PYXIS_API_TOKEN }}
       #     rhcc-username: ${{ secrets[matrix.username] }}
       #     rhcc-password: ${{ secrets[matrix.password] }}
+      - name: Create manifests for ${{matrix.registry}}
+        uses: ./.github/actions/sign-image
+        with:
+          image: ${{ matrix.url }}/${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}-${{ matrix.platform }}
 
   manifest:
     name: Create manifests
     environment: Release
     needs: [prepare, push]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        registry: [gcr, dockerhub]
-        include:
-          - registry: gcr
-            url: gcr.io
-            repository: GCR_REPOSITORY
-            username: GCR_USERNAME
-            password: GCR_JSON_KEY
-          - registry: dockerhub
-            url: quay.io
-            repository: DOCKERHUB_REPOSITORY
-            username: DOCKERHUB_USERNAME
-            password: DOCKERHUB_PASSWORD
-    steps:
-      - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
-      - name: Create manifests for ${{matrix.registry}}
-        uses: ./.github/actions/create-manifests
-        with:
-          version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ matrix.url }}
-          repository: ${{ secrets[matrix.repository] }}
-          combined: false
-          repository-username: ${{ secrets[matrix.username] }}
-          repository-password: ${{ secrets[matrix.password] }}
-
-  sign:
-    name: Sign Images
-    environment: Release
-    needs: [prepare, manifest]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -177,23 +152,14 @@ jobs:
           registry: ${{ matrix.url }}
           username: ${{ secrets[matrix.username] }}
           password: ${{ secrets[matrix.password] }}
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@b3413d484cc23cf8778c3d2aa361568d4eb54679 # v2.5.1
-      - name: Prepare tags
-        id: prepare_tags
-        run: |
-          echo "::set-output name=tags::${IMAGE},${IMAGE}-amd64"
-        env:
-          IMAGE: ${{ matrix.url }}/${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}
-      - name: Sign image with a key
-        run: |
-          cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
-        env:
-          TAGS: ${{ steps.prepare_tags.outputs.tags }}
-          COSIGN_PRIVATE_KEY: ${{secrets.COSIGN_PRIVATE_KEY}}
-          COSIGN_PASSWORD: ${{secrets.COSIGN_PASSWORD}}
-      - name: Sign the images with GitHub OIDC Token
-        run: cosign sign ${TAGS}
-        env:
-          TAGS: ${{ steps.prepare_tags.outputs.tags }}
-          COSIGN_EXPERIMENTAL: true
+      - name: Create manifests for ${{matrix.registry}}
+        uses: ./.github/actions/create-manifests
+        with:
+          version: ${{ needs.prepare.outputs.version }}
+          registry: ${{ matrix.url }}
+          repository: ${{ secrets[matrix.repository] }}
+          combined: false
+      - name: Create manifests for ${{matrix.registry}}
+        uses: ./.github/actions/sign-image
+        with:
+          image: ${{ matrix.url }}/${{ secrets[matrix.repository] }}:${{ needs.prepare.outputs.version }}

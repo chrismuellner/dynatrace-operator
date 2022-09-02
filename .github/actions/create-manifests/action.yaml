@@ -22,12 +22,6 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Login to Registry
-      uses:  docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
-      with:
-        registry: ${{ inputs.registry }}
-        username: ${{ inputs.repository-username }}
-        password: ${{ inputs.repository-password }}
     - name: Create manifest
       env:
         IMAGE: ${{ inputs.registry }}/${{ inputs.repository }}
