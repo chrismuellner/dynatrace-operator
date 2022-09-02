@@ -145,7 +145,7 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ matrix.url }}
           repository: ${{ secrets[matrix.repository] }}
-          combined: true
+          combined: false
           repository-username: ${{ secrets[matrix.username] }}
           repository-password: ${{ secrets[matrix.password] }}
 
