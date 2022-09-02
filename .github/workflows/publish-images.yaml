@@ -152,7 +152,7 @@ jobs:
   sign:
     name: Sign Images
     environment: Release
-    needs: [manifest]
+    needs: [prepare, manifest]
     runs-on: ubuntu-latest
     strategy:
       matrix:
