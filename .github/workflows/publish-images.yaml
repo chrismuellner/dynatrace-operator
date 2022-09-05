@@ -72,20 +72,20 @@ jobs:
     strategy:
       matrix:
         platform: [amd64]
-        registry-name: [gcr, dockerhub]
+        registry: [gcr, dockerhub]
         include:
           # - registry-name: rhcc
           #   registry-url: scan.connect.redhat.com
           #   repository: RHCC_REPOSITORY
           #   username: RHCC_USERNAME
           #   password: RHCC_PASSWORD
-          - registry-name: gcr # todo: same names as create manifest matrix
-            registry-url: gcr.io
+          - registry: gcr
+            url: gcr.io
             repository: GCR_REPOSITORY
             username: GCR_USERNAME
             password: GCR_JSON_KEY
-          - registry-name: dockerhub
-            registry-url: quay.io
+          - registry: dockerhub
+            url: quay.io
             repository: DOCKERHUB_REPOSITORY
             username: DOCKERHUB_USERNAME
             password: DOCKERHUB_PASSWORD
@@ -93,7 +93,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
       - name: Login to Registry
-        uses:  docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
         with:
           registry: ${{ matrix.url }}
           username: ${{ secrets[matrix.username] }}
@@ -105,7 +105,7 @@ jobs:
           platform: ${{ matrix.platform }}
           labels: ${{ needs.prepare.outputs.labels }}
           version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ matrix.registry-url }} # todo: only pass in image -> docker login step happens outside of action
+          registry: ${{ matrix.url }} # todo: only pass in image -> docker login step happens outside of action
           repository: ${{ secrets[matrix.repository] }}
       # - name: Run preflight
       #   if: matrix.registry-name == 'rhcc' && matrix.platform == 'amd64'
