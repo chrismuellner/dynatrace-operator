@@ -21,7 +21,7 @@ runs:
         cosign sign --key env://COSIGN_PRIVATE_KEY ${TAGS}
       env:
         TAGS: ${{ inputs.image }}
-        COSIGN_PRIVATE_KEY: ${{ inputs.signing-key }
+        COSIGN_PRIVATE_KEY: ${{ inputs.signing-key }}
         COSIGN_PASSWORD: ${{ inputs.signing-password }}
     - name: Sign the images with GitHub OIDC Token
       shell: bash
