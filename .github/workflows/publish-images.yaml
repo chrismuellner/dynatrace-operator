@@ -51,7 +51,7 @@ jobs:
   push:
     name: Push images
     environment: Release
-    needs: [prepare, build-amd64]
+    needs: [prepare, build]
     runs-on: ubuntu-latest
     strategy:
       matrix:
