@@ -19,7 +19,7 @@ env:
 
 jobs:
   test:
-    name: Run helm unit tests
+    name: Debug
     runs-on: ubuntu-latest
     if: github.ref_protected
     env:
