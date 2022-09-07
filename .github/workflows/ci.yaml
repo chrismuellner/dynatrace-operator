@@ -18,16 +18,12 @@ env:
   DOCKER_REPOSITORY: "dynatrace/dynatrace-operator"
 
 jobs:
-  test:
-    name: Debug
+  debug:
+    name: Debug Event
     runs-on: ubuntu-latest
-    # if: github.ref_protected == true
-    env:
-      COMBINED: ${{ github.ref_protected }}
     steps:
-      - name: Debug
-        run: |
-          ${{ github }}
+      - name: Dump context
+        uses: crazy-max/ghaction-dump-context@v1
 
   helm-test:
     name: Run helm unit tests
