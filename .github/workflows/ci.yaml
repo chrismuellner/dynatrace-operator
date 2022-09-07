@@ -21,9 +21,15 @@ jobs:
   debug:
     name: Debug Event
     runs-on: ubuntu-latest
+    if: github.ref_protected
+    env:
+      COMBINED: ${{ github.ref_protected }}
     steps:
       - name: Dump context
         uses: crazy-max/ghaction-dump-context@v1
+      - name: Debug
+        run: |
+          echo ${{ env.COMBINED }}
 
   helm-test:
     name: Run helm unit tests
