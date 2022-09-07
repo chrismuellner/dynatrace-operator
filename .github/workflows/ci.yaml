@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Debug
         run: |
-          echo ${{ github }}
+          ${{ github }}
 
   helm-test:
     name: Run helm unit tests
