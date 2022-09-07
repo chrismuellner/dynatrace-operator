@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     # if: github.ref_protected == true
     env:
-      COMBINED: ${{ github.ref_protected }}
+      COMBINED: ${{ github }}
     steps:
       - name: Debug
         run: |
