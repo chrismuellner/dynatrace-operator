@@ -19,15 +19,15 @@ env:
 
 jobs:
   test:
-    name: Run helm unit tests
+    name: Debug
     runs-on: ubuntu-latest
     # if: github.ref_protected == true
     env:
-      COMBINED: ${{ github }}
+      COMBINED: ${{ github.ref_protected }}
     steps:
       - name: Debug
         run: |
-          echo $COMBINED
+          echo ${{ github }}
 
   helm-test:
     name: Run helm unit tests
