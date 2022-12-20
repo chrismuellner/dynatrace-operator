@@ -18,21 +18,12 @@ func GetUID(clt client.Reader) (types.UID, error) {
 	kubeSystemNamespace := &corev1.Namespace{}
 	err := clt.Get(context.TODO(), client.ObjectKey{Name: Namespace}, kubeSystemNamespace)
 	if err != nil {
-		return "", err
+		return "", errors.WithStack(err)
 	}
 	return kubeSystemNamespace.UID, nil
 }
 
-func IsDeployedViaOlm(clt client.Reader, podName string, podNamespace string) (bool, error) {
-	if IsRunLocally() {
-		return false, nil
-	}
-
-	pod := &corev1.Pod{}
-	err := clt.Get(context.TODO(), types.NamespacedName{Name: podName, Namespace: podNamespace}, pod)
-	if err != nil {
-		return false, errors.WithStack(err)
-	}
+func IsDeployedViaOlm(pod corev1.Pod) bool {
 	_, isDeployedViaOlm := pod.Annotations[olmSpecificAnnotation]
-	return isDeployedViaOlm, nil
+	return isDeployedViaOlm
 }

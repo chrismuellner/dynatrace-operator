@@ -34,6 +34,7 @@ spec:
   template:
     metadata:
       annotations:
+        dynatrace.com/inject: "false"
       {{- if (.Values.operator).apparmor}}
         container.apparmor.security.beta.kubernetes.io/{{ .Release.Name }}: runtime/default
       {{- end }}
@@ -68,13 +69,9 @@ spec:
               name: server-port
           resources:
             requests:
-              cpu: {{ default "50m" ((.Values.operator).requests).cpu }}
-              memory: {{ default "64Mi" ((.Values.operator).requests).memory }}
-              ephemeral-storage: "10Mi"
+              {{- toYaml (.Values.operator).requests | nindent 14 }}
             limits:
-              cpu: {{ default "100m" ((.Values.operator).limits).cpu }}
-              memory: {{ default "128Mi" ((.Values.operator).limits).memory }}
-              ephemeral-storage: "10Mi"
+              {{- toYaml (.Values.operator).limits | nindent 14 }}
           volumeMounts:
             - name: tmp-cert-dir
               mountPath: /tmp/dynatrace-operator
@@ -131,7 +128,14 @@ spec:
       {{- if .Values.operator.nodeSelector }}
       nodeSelector: {{- toYaml .Values.operator.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- if .Values.operator.tolerations }}
-      tolerations: {{- toYaml .Values.operator.tolerations | nindent 8 }}
-      {{- end -}}
+      tolerations:
+        {{- if .Values.operator.tolerations }}
+        {{- toYaml .Values.operator.tolerations | nindent 8 }}
+        {{- end }}
+        - key: kubernetes.io/arch
+          value: arm64
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          value: amd64
+          effect: NoSchedule
 {{ end }}

@@ -34,18 +34,18 @@ func VolumeIsDefined(volumes []corev1.Volume, volumeNameToCheck string) bool {
 	return false
 }
 
-func VolumeMountIsDefined(volumeMounts []corev1.VolumeMount, volumeMountNameToCheck string) bool {
-	for _, vol := range volumeMounts {
-		if vol.Name == volumeMountNameToCheck {
+func PortIsIn(ports []corev1.ContainerPort, portToCheck int32) bool {
+	for _, port := range ports {
+		if port.ContainerPort == portToCheck {
 			return true
 		}
 	}
 	return false
 }
 
-func PortIsIn(ports []corev1.ContainerPort, portToCheck int32) bool {
-	for _, port := range ports {
-		if port.ContainerPort == portToCheck {
+func VolumeClaimIsDefined(claims []corev1.PersistentVolumeClaim, claimNameToCheck string) bool {
+	for _, claim := range claims {
+		if claim.ObjectMeta.Name == claimNameToCheck {
 			return true
 		}
 	}

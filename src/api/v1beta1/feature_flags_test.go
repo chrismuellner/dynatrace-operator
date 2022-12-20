@@ -1,9 +1,11 @@
 package v1beta1
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -143,31 +145,13 @@ func TestDeprecatedEnableAnnotations(t *testing.T) {
 
 	assert.True(t, dynakube.FeatureActiveGateAuthToken())
 
-	// Old annotation works
-	dynakube = createDynakubeWithAnnotation(AnnotationFeatureEnableActiveGateAuthToken, "false")
+	dynakube = createDynakubeWithAnnotation(AnnotationFeatureActiveGateAuthToken, "false")
 
 	assert.False(t, dynakube.FeatureActiveGateAuthToken())
 
-	dynakube = createDynakubeWithAnnotation(AnnotationFeatureEnableActiveGateAuthToken, "true")
-
-	assert.True(t, dynakube.FeatureActiveGateAuthToken())
-
-	// New annotation takes precedent
-	dynakube = createDynakubeWithAnnotation(
-		AnnotationFeatureActiveGateAuthToken, "true",
-		AnnotationFeatureEnableActiveGateAuthToken, "false")
-
-	assert.True(t, dynakube.FeatureActiveGateAuthToken())
-
-	dynakube = createDynakubeWithAnnotation(
-		AnnotationFeatureActiveGateAuthToken, "false",
-		AnnotationFeatureEnableActiveGateAuthToken, "true")
-
-	assert.False(t, dynakube.FeatureActiveGateAuthToken())
-
-	// Default is false
+	// Default is true
 	dynakube = createDynakubeWithAnnotation()
-	assert.False(t, dynakube.FeatureActiveGateAuthToken())
+	assert.True(t, dynakube.FeatureActiveGateAuthToken())
 }
 
 func TestMaxMountAttempts(t *testing.T) {
@@ -194,4 +178,50 @@ func TestMaxMountAttempts(t *testing.T) {
 		AnnotationFeatureMaxFailedCsiMountAttempts, "-5")
 
 	assert.Equal(t, DefaultMaxFailedCsiMountAttempts, dynakube.FeatureMaxFailedCsiMountAttempts())
+}
+
+func TestDynaKube_FeatureIgnoredNamespaces(t *testing.T) {
+	dynakube := DynaKube{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: testNamespace,
+		},
+	}
+	ignoredNamespaces := dynakube.getDefaultIgnoredNamespaces()
+	dynakubeNamespaceMatches := false
+
+	for _, namespace := range ignoredNamespaces {
+		regex, err := regexp.Compile(namespace)
+
+		require.NoError(t, err)
+
+		match := regex.MatchString(dynakube.Namespace)
+
+		if match {
+			dynakubeNamespaceMatches = true
+		}
+	}
+
+	assert.True(t, dynakubeNamespaceMatches)
+}
+
+func TestSyntheticNodeType(t *testing.T) {
+	assertion := assert.New(t)
+
+	t.Run("synthetic-node-type", func(t *testing.T) {
+		dynakube := createDynakubeWithAnnotation()
+		assertion.Equal(
+			SyntheticNodeS,
+			dynakube.FeatureSyntheticNodeType(),
+			"default node type: %s",
+			SyntheticNodeS)
+
+		dynakube = createDynakubeWithAnnotation(
+			AnnotationFeatureSyntheticNodeType,
+			SyntheticNodeXs)
+		assertion.Equal(
+			SyntheticNodeXs,
+			dynakube.FeatureSyntheticNodeType(),
+			"declared node type: %s",
+			SyntheticNodeXs)
+	})
 }

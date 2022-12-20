@@ -44,7 +44,7 @@ type Client interface {
 	// download a specific agent version
 	GetAgentVersions(os, installerType, flavor, arch string) ([]string, error)
 
-	GetConnectionInfo() (ConnectionInfo, error)
+	GetOneAgentConnectionInfo() (OneAgentConnectionInfo, error)
 
 	GetProcessModuleConfig(prevRevision uint) (*ProcessModuleConfig, error)
 
@@ -62,11 +62,8 @@ type Client interface {
 	// GetTokenScopes returns the list of scopes assigned to a token if successful.
 	GetTokenScopes(token string) (TokenScopes, error)
 
-	// GetAgentTenantInfo returns AgentTenantInfo for OneAgents that holds UUID, Tenant Token and Endpoints
-	GetAgentTenantInfo() (*AgentTenantInfo, error)
-
-	// GetActiveGateTenantInfo returns AgentTenantInfo for ActiveGate that holds UUID, Tenant Token and Endpoints
-	GetActiveGateTenantInfo() (*ActiveGateTenantInfo, error)
+	// GetActiveGateConnectionInfo returns AgentTenantInfo for ActiveGate that holds UUID, Tenant Token and Endpoints
+	GetActiveGateConnectionInfo() (*ActiveGateConnectionInfo, error)
 
 	// CreateOrUpdateKubernetesSetting returns the object id of the created k8s settings if successful, or an api error otherwise
 	CreateOrUpdateKubernetesSetting(name, kubeSystemUUID, scope string) (string, error)
@@ -87,19 +84,19 @@ type Client interface {
 // Known OS values.
 const (
 	OsUnix = "unix"
-	//Commented for linter, left for further reference
-	//OsWindows = "windows"
-	//OsAix     = "aix"
-	//OsSolaris = "solaris"
+	// Commented for linter, left for further reference
+	// OsWindows = "windows"
+	// OsAix     = "aix"
+	// OsSolaris = "solaris"
 )
 
 // Known installer types.
 const (
 	InstallerTypeDefault = "default"
-	//Commented for linter, left for further reference
-	//InstallerTypeUnattended = "default-unattended"
+	// Commented for linter, left for further reference
+	// InstallerTypeUnattended = "default-unattended"
 	InstallerTypePaaS = "paas"
-	//InstallerTypePaasSh     = "paas-sh"
+	// InstallerTypePaasSh     = "paas-sh"
 )
 
 // Known token scopes
@@ -159,7 +156,7 @@ func SkipCertificateValidation(skip bool) Option {
 		if skip {
 			t := c.httpClient.Transport.(*http.Transport)
 			if t.TLSClientConfig == nil {
-				t.TLSClientConfig = &tls.Config{}
+				t.TLSClientConfig = &tls.Config{} //nolint:gosec // fix is expected to be delivered soon
 			}
 			t.TLSClientConfig.InsecureSkipVerify = true
 		}
@@ -187,7 +184,7 @@ func Certs(certs []byte) Option {
 
 		t := c.httpClient.Transport.(*http.Transport)
 		if t.TLSClientConfig == nil {
-			t.TLSClientConfig = &tls.Config{}
+			t.TLSClientConfig = &tls.Config{} //nolint:gosec // fix is expected to be delivered soon
 		}
 		t.TLSClientConfig.RootCAs = rootCAs
 	}

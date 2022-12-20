@@ -34,6 +34,7 @@ spec:
   template:
     metadata:
       annotations:
+        dynatrace.com/inject: "false"
         kubectl.kubernetes.io/default-container: webhook
         {{- if (.Values.webhook).apparmor}}
         container.apparmor.security.beta.kubernetes.io/webhook: runtime/default
@@ -111,13 +112,9 @@ spec:
               containerPort: 8443
           resources:
             requests:
-              cpu: {{ default "300m" ((.Values.webhook).requests).cpu }}
-              memory: {{ default "128Mi" ((.Values.webhook).requests).memory }}
-              ephemeral-storage: "10Mi"
+              {{- toYaml (.Values.webhook).requests | nindent 14 }}
             limits:
-              cpu: {{ default "300m" ((.Values.webhook).limits).cpu }}
-              memory: {{ default "128Mi" ((.Values.webhook).limits).memory }}
-              ephemeral-storage: "10Mi"
+              {{- toYaml (.Values.webhook).limits | nindent 14 }}
           volumeMounts:
             - name: certs-dir
               mountPath: /tmp/k8s-webhook-server/serving-certs/
@@ -144,7 +141,14 @@ spec:
       {{- if .Values.webhook.nodeSelector }}
       nodeSelector: {{- toYaml .Values.webhook.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- if .Values.webhook.tolerations }}
-      tolerations: {{- toYaml .Values.webhook.tolerations | nindent 8 }}
-      {{- end -}}
+      tolerations:
+        {{- if .Values.webhook.tolerations }}
+        {{- toYaml .Values.webhook.tolerations | nindent 8 }}
+        {{- end }}
+        - key: kubernetes.io/arch
+          value: arm64
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          value: amd64
+          effect: NoSchedule
 {{ end }}

@@ -9,8 +9,12 @@ const (
 	updatePodEvent       = "UpdatePod"
 	IncompatibleCRDEvent = "IncompatibleCRDPresent"
 	missingDynakubeEvent = "MissingDynakube"
+
+	defaultUser   int64 = 1001
+	defaultGroup  int64 = 1001
+	rootUserGroup int64 = 0
 )
 
 var (
-	log = logger.NewDTLogger().WithName("mutation-webhook.pod")
+	log = logger.Factory.GetLogger("mutation")
 )

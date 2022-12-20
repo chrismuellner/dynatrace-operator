@@ -13,7 +13,6 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "^1.19"
   DOCKER_REGISTRY: "quay.io"
   DOCKER_REPOSITORY: "dynatrace/dynatrace-operator"
 
@@ -36,11 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Set up Helm
-        uses: azure/setup-helm@b5b231a831f96336bbfeccc1329990f0005c5bb1 # v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
         with:
-          version: v3.7.1
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download dependencies
         id: helm-unittest-download
         run: |
@@ -55,11 +54,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Set up Helm
-        uses: azure/setup-helm@b5b231a831f96336bbfeccc1329990f0005c5bb1 # v3
+        uses: azure/setup-helm@5119fcb9089d432beecbf79bb2c7915207344b78 # v3.5
         with:
-          version: v3.8.2
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Run Linting
         id: helm-linting
         run: |
@@ -70,11 +69,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Setup Golang
-        uses: actions/setup-go@268d8c0ca0432bb2cf416faae41297df9d262d7f # v3.3.0
+        uses: actions/setup-go@6edd4406fa81c3da01a34fa6f6343087c207a568 # v3.5.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: "${{ github.workspace }}/go.mod"
       - name: Download dependencies
         id: depdownload
         run: |
@@ -88,31 +87,40 @@ jobs:
     name: Run linting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@268d8c0ca0432bb2cf416faae41297df9d262d7f # v3.3.0
-        with:
-          go-version: ${{ env.GO_VERSION }}
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
+      - uses: actions/setup-go@6edd4406fa81c3da01a34fa6f6343087c207a568 # v3.5.0
+        with:
+          go-version-file: "${{ github.workspace }}/go.mod"
       - name: Download dependencies
         id: depdownload
         run: |
           hack/build/ci/install-cgo-dependencies.sh
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@537aa1903e5d359d0b27dbc19ddd22c5087f3fbc # v3
+        uses: golangci/golangci-lint-action@0ad9a0988b3973e851ab0a07adf248ec2e100376 # v3.3.1
         with:
-          version: v1.48
-          args: --build-tags integration,containers_image_storage_stub --timeout 300s
+          version: v1.49
+          args: --build-tags containers_image_storage_stub,e2e --timeout 300s
 
   prepare:
     name: Prepare properties
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Prepare build parameters
         id: prep
         run: |
           hack/build/ci/prepare-build-variables.sh
+      - name: Docker metadata
+        uses: docker/metadata-action@57396166ad8aefe6098280995947635806a0e6ea # v4.1.1
+        id: meta
+        with:
+          images: dynatrace/dynatrace-operator
+          tags: ${{ steps.prep.outputs.docker_image_tag }}
+          labels: |
+            ${{ steps.prep.outputs.docker_image_labels }}
+            vcs-ref=${{ github.sha }}
       - name: Prepare build parameters
         id: prepenv
         run: |
@@ -120,15 +128,11 @@ jobs:
           # Reason: global envs do not work in workflow calls
           # More info: https://github.com/actions/runner/issues/480#issuecomment-1021278915
 
-          echo ::set-output name=goversion::${{ env.GO_VERSION }}
-          echo ::set-output name=registry::${{ env.DOCKER_REGISTRY }}
-          echo ::set-output name=repository::${{ env.DOCKER_REPOSITORY }}
+          echo "registry=${{ env.DOCKER_REGISTRY }}" >> "$GITHUB_OUTPUT"
+          echo "repository=${{ env.DOCKER_REPOSITORY }}" >> "$GITHUB_OUTPUT"
     outputs:
-      labels: ${{ steps.prep.outputs.docker_image_labels }}
+      labels: ${{ steps.meta.outputs.labels }}
       version: ${{ steps.prep.outputs.docker_image_tag }}
-      go-linker-args: ${{ steps.prep.outputs.go_linker_args }}
-      cgo-cflags: ${{ steps.prep.outputs.cgo_cflags }}
-      go-version: ${{ steps.prepenv.outputs.goversion }}
       registry: ${{ steps.prepenv.outputs.registry }}
       repository: ${{ steps.prepenv.outputs.repository }}
 
@@ -141,21 +145,12 @@ jobs:
         platform: [amd64, arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
-      - name: Login to Registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_PASSWORD }}
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Build image
-        if: matrix.platform != 'arm64' || github.ref_protected == 'true'
+        if: matrix.platform != 'arm64' || github.ref_protected
         uses: ./.github/actions/build-image
         with:
           platform: ${{ matrix.platform }}
-          go-version: ${{ needs.prepare.outputs.go-version }}
-          go-linker-args: ${{ needs.prepare.outputs.go-linker-args }}
-          cgo-cflags: ${{ needs.prepare.outputs.cgo-cflags }}
           labels: ${{ needs.prepare.outputs.labels }}
           image-tag: ${{ needs.prepare.outputs.version }}
 
@@ -168,15 +163,15 @@ jobs:
         platform: [amd64, arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Login to Registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2.1.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
       - name: Upload Image
-        if: matrix.platform != 'arm64' || github.ref_protected == 'true'
+        if: matrix.platform != 'arm64' || github.ref_protected
         uses: ./.github/actions/upload-image
         with:
           platform: ${{ matrix.platform }}
@@ -190,12 +185,12 @@ jobs:
     needs: [prepare, push]
     runs-on: ubuntu-latest
     env:
-      COMBINED: ${{ github.ref_protected == 'true' }}
+      COMBINED: ${{ github.ref_protected }}
     steps:
       - name: Checkout
-        uses: actions/checkout@2541b1294d2704b0964813337f33b291d3f8596b # v3
+        uses: actions/checkout@755da8c3cf115ac066823e79a1e1788f8940201b # v3.2.0
       - name: Login to Registry
-        uses: docker/login-action@49ed152c8eca782a232dede0303416e8f356c37b # v2
+        uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2.1.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}

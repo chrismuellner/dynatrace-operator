@@ -30,7 +30,7 @@ tests:
       - hasDocuments:
           count: 1
 
-  - it: should exist
+  - it: should exist on kubernetes
     set:
       platform: kubernetes
       image: image-name
@@ -85,11 +85,9 @@ tests:
                   requests:
                     cpu: 50m
                     memory: 64Mi
-                    ephemeral-storage: 10Mi
                   limits:
                     cpu: 100m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                 volumeMounts:
                   - name: tmp-cert-dir
                     mountPath: /tmp/dynatrace-operator
@@ -137,24 +135,39 @@ tests:
               - emptyDir: { }
                 name: tmp-cert-dir
             serviceAccountName: RELEASE-NAME
-      - isNull:
-          path: spec.template.spec.tolerations
+            tolerations:
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: arm64
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: amd64
       - isNull:
           path: spec.template.spec.nodeSelector
 
 
-  - it: should have tolerations if set
+  - it: should have tolerations if set in kubernetes
     set:
       platform: kubernetes
       operator.tolerations:
-        test-key: test-value
+        - effect: NoSchedule
+          key: a-special-taint
+          value: a-special-value
     asserts:
       - equal:
           path: spec.template.spec.tolerations
           value:
-            test-key: test-value
+            - effect: NoSchedule
+              key: a-special-taint
+              value: a-special-value
+            - effect: NoSchedule
+              key: kubernetes.io/arch
+              value: arm64
+            - effect: NoSchedule
+              key: kubernetes.io/arch
+              value: amd64
 
-  - it: should have nodeSelectors if set
+  - it: should have nodeSelectors if set in kubernetes
     set:
       platform: kubernetes
       operator.nodeSelector:
@@ -172,7 +185,7 @@ tests:
       - isNull:
           path: spec.template.spec.imagePullSecrets
 
-  - it: should exist
+  - it: should exist on openshift
     set:
       platform: openshift
       image: image-name
@@ -227,11 +240,9 @@ tests:
                   requests:
                     cpu: 50m
                     memory: 64Mi
-                    ephemeral-storage: 10Mi
                   limits:
                     cpu: 100m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                 volumeMounts:
                   - name: tmp-cert-dir
                     mountPath: /tmp/dynatrace-operator
@@ -279,23 +290,38 @@ tests:
               - emptyDir: { }
                 name: tmp-cert-dir
             serviceAccountName: RELEASE-NAME
-      - isNull:
-          path: spec.template.spec.tolerations
+            tolerations:
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: arm64
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: amd64
       - isNull:
           path: spec.template.spec.nodeSelector
 
-  - it: should have tolerations if set
+  - it: should have tolerations if set in openshift
     set:
       platform: openshift
       operator.tolerations:
-        test-key: test-value
+        - effect: NoSchedule
+          key: a-special-taint
+          value: a-special-value
     asserts:
       - equal:
           path: spec.template.spec.tolerations
           value:
-            test-key: test-value
+            - effect: NoSchedule
+              key: a-special-taint
+              value: a-special-value
+            - effect: NoSchedule
+              key: kubernetes.io/arch
+              value: arm64
+            - effect: NoSchedule
+              key: kubernetes.io/arch
+              value: amd64
 
-  - it: should have nodeSelectors if set
+  - it: should have nodeSelectors if set in openshift
     set:
       platform: openshift
       operator.nodeSelector:
@@ -359,6 +385,7 @@ tests:
       - equal:
           path: spec.template.metadata.annotations
           value:
+            dynatrace.com/inject: "false"
             testKey: testValue
 
   - it: should take custom labels in spec.template.metadata.labels path
@@ -372,3 +399,18 @@ tests:
       - equal:
           path: spec.template.metadata.labels.testKey
           value: testValue
+
+  - it: should set ephemeral-storage request/limits
+    set:
+      platform: kubernetes
+      operator.requests:
+        ephemeral-storage: 320
+      operator.limits:
+        ephemeral-storage: 420
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.ephemeral-storage
+          value: 420
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.ephemeral-storage
+          value: 320

@@ -56,6 +56,27 @@ func TestHandle(t *testing.T) {
 		mutator2.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Enabled", 1)
 		mutator2.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Mutate", 1)
 	})
+	t.Run("disable all mutators with dynatrace.com/inject", func(t *testing.T) {
+		mutator1 := createSimplePodMutatorMock()
+		mutator2 := createSimplePodMutatorMock()
+		dynakube := getTestDynakube()
+		ctx := context.TODO()
+		pod := getTestPod()
+		pod.ObjectMeta.Annotations = map[string]string{dtwebhook.AnnotationDynatraceInject: "false"}
+		namespace := getTestNamespace()
+		request := createTestAdmissionRequest(pod)
+		podWebhook := createTestWebhook(t, []dtwebhook.PodMutator{mutator1, mutator2}, []client.Object{dynakube, pod, namespace})
+
+		response := podWebhook.Handle(ctx, *request)
+		require.NotNil(t, response)
+		assert.True(t, response.Allowed)
+		assert.NotNil(t, response.Result)
+		assert.Nil(t, response.Patches)
+		mutator1.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Enabled", 0)
+		mutator1.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Mutate", 0)
+		mutator2.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Enabled", 0)
+		mutator2.(*dtwebhook.PodMutatorMock).AssertNumberOfCalls(t, "Mutate", 0)
+	})
 	t.Run("sad path", func(t *testing.T) {
 		sadMutator := createFailPodMutatorMock()
 		dynakube := getTestDynakube()
@@ -90,7 +111,21 @@ func TestHandlePodMutation(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, mutationRequest.InstallContainer)
 		assert.Len(t, mutationRequest.Pod.Spec.InitContainers, 2)
-		assert.Equal(t, mutationRequest.Pod.Spec.InitContainers[1].SecurityContext, testSecurityContext)
+
+		initSecurityContext := mutationRequest.Pod.Spec.InitContainers[1].SecurityContext
+		require.NotNil(t, initSecurityContext)
+
+		require.NotNil(t, initSecurityContext.Privileged)
+		assert.False(t, *initSecurityContext.Privileged)
+
+		require.NotNil(t, initSecurityContext.AllowPrivilegeEscalation)
+		assert.False(t, *initSecurityContext.AllowPrivilegeEscalation)
+
+		require.NotNil(t, initSecurityContext.ReadOnlyRootFilesystem)
+		assert.True(t, *initSecurityContext.ReadOnlyRootFilesystem)
+
+		assert.Nil(t, initSecurityContext.RunAsNonRoot)
+
 		assert.Equal(t, mutationRequest.Pod.Spec.InitContainers[1].Resources, testResourceRequirements)
 		assert.Equal(t, "true", mutationRequest.Pod.Annotations[dtwebhook.AnnotationDynatraceInjected])
 		mutator1.(*dtwebhook.PodMutatorMock).AssertCalled(t, "Enabled", mutationRequest.BaseRequest)

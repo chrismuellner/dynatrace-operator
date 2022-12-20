@@ -28,6 +28,16 @@ func TestPrepareVolumes(t *testing.T) {
 		assert.Contains(t, volumes, getRootVolume())
 		assert.NotContains(t, volumes, getCertificateVolume(instance))
 	})
+	t.Run(`has tenant secret volume`, func(t *testing.T) {
+		instance := &dynatracev1beta1.DynaKube{
+			ObjectMeta: corev1.ObjectMeta{
+				Name: testName,
+			},
+		}
+		volumes := prepareVolumes(instance)
+
+		assert.Contains(t, volumes, getOneAgentSecretVolume(instance))
+	})
 	t.Run(`has certificate volume`, func(t *testing.T) {
 		instance := &dynatracev1beta1.DynaKube{
 			Spec: dynatracev1beta1.DynaKubeSpec{

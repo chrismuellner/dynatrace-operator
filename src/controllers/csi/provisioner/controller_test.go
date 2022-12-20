@@ -6,18 +6,16 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	dynatracev1beta1 "github.com/Dynatrace/dynatrace-operator/src/api/v1beta1"
 	"github.com/Dynatrace/dynatrace-operator/src/arch"
 	"github.com/Dynatrace/dynatrace-operator/src/controllers/csi/metadata"
-	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube"
+	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube/dynatraceclient"
 	"github.com/Dynatrace/dynatrace-operator/src/dtclient"
 	"github.com/Dynatrace/dynatrace-operator/src/scheme/fake"
 	"github.com/spf13/afero"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
@@ -28,13 +26,23 @@ import (
 )
 
 const (
+	testAPIURL   = "http://test-uid/api"
+	tenantUUID   = "test-uid"
 	dkName       = "dynakube-test"
 	otherDkName  = "other-dk"
 	errorMsg     = "test-error"
-	tenantUUID   = "test-uid"
 	agentVersion = "12345"
 	testZip      = `UEsDBAoAAAAAAKh0p1JsLSFnGQAAABkAAAAIABwAdGVzdC50eHRVVAkAA3w0lWATB55gdXgLAAEE6AMAAAToAwAAeW91IGZvdW5kIHRoZSBlYXN0ZXIgZWdnClBLAwQKAAAAAADAOa5SAAAAAAAAAAAAAAAABQAcAHRlc3QvVVQJAAMXB55gHQeeYHV4CwABBOgDAAAE6AMAAFBLAwQKAAAAAACodKdSbC0hZxkAAAAZAAAADQAcAHRlc3QvdGVzdC50eHRVVAkAA3w0lWATB55gdXgLAAEE6AMAAAToAwAAeW91IGZvdW5kIHRoZSBlYXN0ZXIgZWdnClBLAwQKAAAAAADCOa5SAAAAAAAAAAAAAAAACgAcAHRlc3QvdGVzdC9VVAkAAxwHnmAgB55gdXgLAAEE6AMAAAToAwAAUEsDBAoAAAAAAKh0p1JsLSFnGQAAABkAAAASABwAdGVzdC90ZXN0L3Rlc3QudHh0VVQJAAN8NJVgHAeeYHV4CwABBOgDAAAE6AMAAHlvdSBmb3VuZCB0aGUgZWFzdGVyIGVnZwpQSwMECgAAAAAA2zquUgAAAAAAAAAAAAAAAAYAHABhZ2VudC9VVAkAAy4JnmAxCZ5gdXgLAAEE6AMAAAToAwAAUEsDBAoAAAAAAOI6rlIAAAAAAAAAAAAAAAALABwAYWdlbnQvY29uZi9VVAkAAzgJnmA+CZ5gdXgLAAEE6AMAAAToAwAAUEsDBAoAAAAAAKh0p1JsLSFnGQAAABkAAAATABwAYWdlbnQvY29uZi90ZXN0LnR4dFVUCQADfDSVYDgJnmB1eAsAAQToAwAABOgDAAB5b3UgZm91bmQgdGhlIGVhc3RlciBlZ2cKUEsBAh4DCgAAAAAAqHSnUmwtIWcZAAAAGQAAAAgAGAAAAAAAAQAAAKSBAAAAAHRlc3QudHh0VVQFAAN8NJVgdXgLAAEE6AMAAAToAwAAUEsBAh4DCgAAAAAAwDmuUgAAAAAAAAAAAAAAAAUAGAAAAAAAAAAQAO1BWwAAAHRlc3QvVVQFAAMXB55gdXgLAAEE6AMAAAToAwAAUEsBAh4DCgAAAAAAqHSnUmwtIWcZAAAAGQAAAA0AGAAAAAAAAQAAAKSBmgAAAHRlc3QvdGVzdC50eHRVVAUAA3w0lWB1eAsAAQToAwAABOgDAABQSwECHgMKAAAAAADCOa5SAAAAAAAAAAAAAAAACgAYAAAAAAAAABAA7UH6AAAAdGVzdC90ZXN0L1VUBQADHAeeYHV4CwABBOgDAAAE6AMAAFBLAQIeAwoAAAAAAKh0p1JsLSFnGQAAABkAAAASABgAAAAAAAEAAACkgT4BAAB0ZXN0L3Rlc3QvdGVzdC50eHRVVAUAA3w0lWB1eAsAAQToAwAABOgDAABQSwECHgMKAAAAAADbOq5SAAAAAAAAAAAAAAAABgAYAAAAAAAAABAA7UGjAQAAYWdlbnQvVVQFAAMuCZ5gdXgLAAEE6AMAAAToAwAAUEsBAh4DCgAAAAAA4jquUgAAAAAAAAAAAAAAAAsAGAAAAAAAAAAQAO1B4wEAAGFnZW50L2NvbmYvVVQFAAM4CZ5gdXgLAAEE6AMAAAToAwAAUEsBAh4DCgAAAAAAqHSnUmwtIWcZAAAAGQAAABMAGAAAAAAAAQAAAKSBKAIAAGFnZW50L2NvbmYvdGVzdC50eHRVVAUAA3w0lWB1eAsAAQToAwAABOgDAABQSwUGAAAAAAgACACKAgAAjgIAAAAA`
 )
+
+type CSIGarbageCollectorMock struct {
+	mock.Mock
+}
+
+func (m *CSIGarbageCollectorMock) Reconcile(context.Context, reconcile.Request) (reconcile.Result, error) {
+	args := m.Called()
+	return args.Get(0).(reconcile.Result), args.Error(1)
+}
 
 type mkDirAllErrorFs struct {
 	afero.Fs
@@ -44,39 +52,45 @@ func (fs *mkDirAllErrorFs) MkdirAll(_ string, _ os.FileMode) error {
 	return fmt.Errorf(errorMsg)
 }
 
-func TestOneAgentProvisioner_Reconcile(t *testing.T) {
+func TestOneAgentProvisioner_Reconcile(t *testing.T) { //nolint:revive
 	ctx := context.TODO()
 	dynakubeName := "test-dk"
+
 	t.Run(`no dynakube instance`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(),
 			db:        metadata.FakeMemoryDB(),
+			gc:        gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{}, result)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{}, result)
 	})
 	t.Run(`dynakube deleted`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		db := metadata.FakeMemoryDB()
 		dynakube := metadata.Dynakube{TenantUUID: tenantUUID, LatestVersion: agentVersion, Name: dkName}
 		_ = db.InsertDynakube(ctx, &dynakube)
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(),
 			db:        db,
+			gc:        gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dynakube.Name}})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{}, result)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{}, result)
 
 		ten, err := db.GetDynakube(ctx, dynakube.TenantUUID)
-		assert.NoError(t, err)
-		assert.Nil(t, ten)
+		require.NoError(t, err)
+		require.Nil(t, ten)
 	})
 	t.Run(`application monitoring disabled`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -89,14 +103,16 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 				},
 			),
 			db: metadata.FakeMemoryDB(),
+			gc: gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dynakubeName}})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
 	})
 	t.Run(`csi driver not enabled`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -113,16 +129,18 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 				},
 			),
 			db: metadata.FakeMemoryDB(),
+			gc: gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dynakubeName}})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
 	})
 	t.Run(`csi driver disabled`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		db := metadata.FakeMemoryDB()
-		db.InsertDynakube(ctx, &metadata.Dynakube{Name: dynakubeName})
+		_ = db.InsertDynakube(ctx, &metadata.Dynakube{Name: dynakubeName})
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -139,19 +157,70 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 				},
 			),
 			db: db,
+			gc: gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dynakubeName}})
 
 		require.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{RequeueAfter: longRequeueDuration}, result)
 
 		dynakubeMetadatas, err := db.GetAllDynakubes(ctx)
 		require.NoError(t, err)
-		assert.Len(t, dynakubeMetadatas, 0)
+		require.Len(t, dynakubeMetadatas, 0)
+	})
+	t.Run(`host monitoring used`, func(t *testing.T) {
+		fakeClient := fake.NewClient(
+			&dynatracev1beta1.DynaKube{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dkName,
+				},
+				Spec: dynatracev1beta1.DynaKubeSpec{
+					APIURL: testAPIURL,
+					OneAgent: dynatracev1beta1.OneAgentSpec{
+						HostMonitoring: &dynatracev1beta1.HostInjectSpec{},
+					},
+				},
+			},
+			&v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dkName,
+				},
+				Data: map[string][]byte{
+					dtclient.DynatraceApiToken: []byte("api-token"),
+				},
+			},
+		)
+		mockClient := &dtclient.MockDynatraceClient{}
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			DynatraceClient: mockClient,
+		}
 
+		gc := &CSIGarbageCollectorMock{}
+		gc.On("Reconcile").Return(reconcile.Result{}, nil)
+		db := metadata.FakeMemoryDB()
+
+		provisioner := &OneAgentProvisioner{
+			apiReader:              fakeClient,
+			client:                 fakeClient,
+			fs:                     afero.NewMemMapFs(),
+			db:                     db,
+			gc:                     gc,
+			path:                   metadata.PathResolver{},
+			dynatraceClientBuilder: mockDtcBuilder,
+		}
+		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
+
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{RequeueAfter: defaultRequeueDuration}, result)
+
+		dynakubeMetadatas, err := db.GetAllDynakubes(ctx)
+		require.NoError(t, err)
+		require.Len(t, dynakubeMetadatas, 1)
 	})
 	t.Run(`no tokens`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -159,62 +228,28 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
 						},
 					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
-						},
-					},
 				},
 			),
+			gc: gc,
+			db: metadata.FakeMemoryDB(),
+			fs: afero.NewMemMapFs(),
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
 
-		assert.EqualError(t, err, `failed to query tokens: secrets "`+dkName+`" not found`)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{}, result)
+		require.EqualError(t, err, `secrets "`+dkName+`" not found`)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{}, result)
 	})
 	t.Run(`error when creating dynatrace client`, func(t *testing.T) {
-		provisioner := &OneAgentProvisioner{
-			apiReader: fake.NewClient(
-				&dynatracev1beta1.DynaKube{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: dkName,
-					},
-					Spec: dynatracev1beta1.DynaKubeSpec{
-						OneAgent: dynatracev1beta1.OneAgentSpec{
-							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
-						},
-					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
-						},
-					},
-				},
-				&v1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: dkName,
-					},
-				},
-			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return nil, fmt.Errorf(errorMsg)
-			},
+		gc := &CSIGarbageCollectorMock{}
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			Err: fmt.Errorf(errorMsg),
 		}
-		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
-
-		assert.EqualError(t, err, "failed to create Dynatrace client: "+errorMsg)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{}, result)
-	})
-	t.Run(`error when querying dynatrace client for connection info`, func(t *testing.T) {
-		mockClient := &dtclient.MockDynatraceClient{}
-		mockClient.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{}, fmt.Errorf(errorMsg))
-
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -222,6 +257,7 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
 						},
@@ -231,26 +267,36 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: dkName,
 					},
+					Data: map[string][]byte{
+						dtclient.DynatraceApiToken: []byte("test-value"),
+					},
 				},
 			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return mockClient, nil
-			},
+			dynatraceClientBuilder: mockDtcBuilder,
+			gc:                     gc,
+			db:                     metadata.FakeMemoryDB(),
+			fs:                     afero.NewMemMapFs(),
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{RequeueAfter: 15 * time.Second}, result)
+		require.EqualError(t, err, "failed to create Dynatrace client: "+errorMsg)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{}, result)
 	})
 	t.Run(`error creating directories`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		errorfs := &mkDirAllErrorFs{
 			Fs: afero.NewMemMapFs(),
 		}
 		mockClient := &dtclient.MockDynatraceClient{}
-		mockClient.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
-			TenantUUID: tenantUUID,
+		mockClient.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: tenantUUID,
+			},
 		}, nil)
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			DynatraceClient: mockClient,
+		}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -258,13 +304,9 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
-						},
-					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
 						},
 					},
 				},
@@ -272,28 +314,34 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: dkName,
 					},
+					Data: map[string][]byte{
+						dtclient.DynatraceApiToken: []byte("api-token"),
+					},
 				},
 			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return mockClient, nil
-			},
-			fs: errorfs,
-			db: metadata.FakeMemoryDB(),
+			dynatraceClientBuilder: mockDtcBuilder,
+			fs:                     errorfs,
+			db:                     metadata.FakeMemoryDB(),
+			gc:                     gc,
 		}
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
 
-		assert.EqualError(t, err, "failed to create directory "+filepath.Join(tenantUUID)+": "+errorMsg)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{}, result)
+		require.EqualError(t, err, "failed to create directory "+tenantUUID+": "+errorMsg)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{}, result)
 
 		// Logging newline so go test can parse the output correctly
 		log.Info("")
 	})
 	t.Run(`error getting latest agent version`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
+		gc.On("Reconcile").Return(reconcile.Result{}, nil)
 		memFs := afero.NewMemMapFs()
 		mockClient := &dtclient.MockDynatraceClient{}
-		mockClient.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
-			TenantUUID: tenantUUID,
+		mockClient.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: tenantUUID,
+			},
 		}, nil)
 		mockClient.On("GetAgent",
 			mock.AnythingOfType("string"),
@@ -307,6 +355,9 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 			On("GetAgentVersions", dtclient.OsUnix, dtclient.InstallerTypePaaS, arch.Flavor, mock.AnythingOfType("string")).
 			Return(make([]string, 0), fmt.Errorf(errorMsg))
 		mockClient.On("GetProcessModuleConfig", mock.AnythingOfType("uint")).Return(&testProcessModuleConfig, nil)
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			DynatraceClient: mockClient,
+		}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -314,13 +365,9 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
-						},
-					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
 						},
 					},
 				},
@@ -328,14 +375,16 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: dkName,
 					},
+					Data: map[string][]byte{
+						dtclient.DynatraceApiToken: []byte("api-token"),
+					},
 				},
 			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return mockClient, nil
-			},
-			fs:       memFs,
-			db:       metadata.FakeMemoryDB(),
-			recorder: &record.FakeRecorder{},
+			dynatraceClientBuilder: mockDtcBuilder,
+			fs:                     memFs,
+			db:                     metadata.FakeMemoryDB(),
+			recorder:               &record.FakeRecorder{},
+			gc:                     gc,
 		}
 
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
@@ -344,23 +393,29 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 		// making sure one is printed here
 		log.Info("")
 
-		assert.NoError(t, err)
-		assert.NotEmpty(t, result)
+		require.NoError(t, err)
+		require.NotEmpty(t, result)
 
 		exists, err := afero.Exists(memFs, tenantUUID)
 
-		assert.NoError(t, err)
-		assert.True(t, exists)
+		require.NoError(t, err)
+		require.True(t, exists)
 	})
 	t.Run(`error getting dynakube from db`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
 		memFs := afero.NewMemMapFs()
 		mockClient := &dtclient.MockDynatraceClient{}
-		mockClient.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
-			TenantUUID: tenantUUID,
+		mockClient.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: tenantUUID,
+			},
 		}, nil)
 		mockClient.On("GetLatestAgentVersion",
 			mock.AnythingOfType("string"),
 			mock.AnythingOfType("string")).Return(agentVersion, nil)
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			DynatraceClient: mockClient,
+		}
 		provisioner := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -368,13 +423,9 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
-						},
-					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
 						},
 					},
 				},
@@ -384,28 +435,30 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 					},
 				},
 			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return mockClient, nil
-			},
-			fs: memFs,
-			db: &metadata.FakeFailDB{},
+			dynatraceClientBuilder: mockDtcBuilder,
+			fs:                     memFs,
+			db:                     &metadata.FakeFailDB{},
+			gc:                     gc,
 		}
 
 		result, err := provisioner.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
 
-		assert.Error(t, err)
-		assert.Empty(t, result)
-
+		require.Error(t, err)
+		require.Empty(t, result)
 	})
 	t.Run(`correct directories are created`, func(t *testing.T) {
+		gc := &CSIGarbageCollectorMock{}
+		gc.On("Reconcile").Return(reconcile.Result{}, nil)
 		memFs := afero.NewMemMapFs()
 		memDB := metadata.FakeMemoryDB()
 		err := memDB.InsertDynakube(ctx, metadata.NewDynakube(dkName, tenantUUID, agentVersion, "", 0))
 		require.NoError(t, err)
 
 		mockClient := &dtclient.MockDynatraceClient{}
-		mockClient.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
-			TenantUUID: tenantUUID,
+		mockClient.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: tenantUUID,
+			},
 		}, nil)
 		mockClient.On("GetLatestAgentVersion",
 			mock.AnythingOfType("string"),
@@ -424,6 +477,9 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 			}).
 			Return(nil)
 		mockClient.On("GetProcessModuleConfig", mock.AnythingOfType("uint")).Return(&testProcessModuleConfig, nil)
+		mockDtcBuilder := &dynatraceclient.StubBuilder{
+			DynatraceClient: mockClient,
+		}
 		r := &OneAgentProvisioner{
 			apiReader: fake.NewClient(
 				&dynatracev1beta1.DynaKube{
@@ -431,46 +487,43 @@ func TestOneAgentProvisioner_Reconcile(t *testing.T) {
 						Name: dkName,
 					},
 					Spec: dynatracev1beta1.DynaKubeSpec{
+						APIURL: testAPIURL,
 						OneAgent: dynatracev1beta1.OneAgentSpec{
 							ApplicationMonitoring: buildValidApplicationMonitoringSpec(t),
 						},
-					},
-					Status: dynatracev1beta1.DynaKubeStatus{
-						ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-							TenantUUID: tenantUUID,
-						},
-						LatestAgentVersionUnixPaas: agentVersion,
 					},
 				},
 				&v1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: dkName,
 					},
+					Data: map[string][]byte{
+						dtclient.DynatraceApiToken: []byte("api-token"),
+					},
 				},
 			),
-			dtcBuildFunc: func(dynakube.DynatraceClientProperties) (dtclient.Client, error) {
-				return mockClient, nil
-			},
-			fs:       memFs,
-			db:       memDB,
-			recorder: &record.FakeRecorder{},
+			dynatraceClientBuilder: mockDtcBuilder,
+			fs:                     memFs,
+			db:                     memDB,
+			recorder:               &record.FakeRecorder{},
+			gc:                     gc,
 		}
 
 		result, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: dkName}})
 
-		assert.NoError(t, err)
-		assert.NotNil(t, result)
-		assert.Equal(t, reconcile.Result{RequeueAfter: 5 * time.Minute}, result)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, reconcile.Result{RequeueAfter: 5 * time.Minute}, result)
 
 		exists, err := afero.Exists(memFs, tenantUUID)
 
-		assert.NoError(t, err)
-		assert.True(t, exists)
+		require.NoError(t, err)
+		require.True(t, exists)
 
 		fileInfo, err := memFs.Stat(tenantUUID)
 
-		assert.NoError(t, err)
-		assert.True(t, fileInfo.IsDir())
+		require.NoError(t, err)
+		require.True(t, fileInfo.IsDir())
 	})
 }
 
@@ -480,7 +533,7 @@ func TestHasCodeModulesWithCSIVolumeEnabled(t *testing.T) {
 
 		isEnabled := dk.NeedsCSIDriver()
 
-		assert.False(t, isEnabled)
+		require.False(t, isEnabled)
 	})
 
 	t.Run(`application monitoring enabled`, func(t *testing.T) {
@@ -494,7 +547,7 @@ func TestHasCodeModulesWithCSIVolumeEnabled(t *testing.T) {
 
 		isEnabled := dk.NeedsCSIDriver()
 
-		assert.True(t, isEnabled)
+		require.True(t, isEnabled)
 	})
 
 	t.Run(`application monitoring enabled without csi driver`, func(t *testing.T) {
@@ -510,7 +563,7 @@ func TestHasCodeModulesWithCSIVolumeEnabled(t *testing.T) {
 
 		isEnabled := dk.NeedsCSIDriver()
 
-		assert.False(t, isEnabled)
+		require.False(t, isEnabled)
 	})
 }
 
@@ -525,7 +578,7 @@ func TestProvisioner_CreateDynakube(t *testing.T) {
 	ctx := context.TODO()
 	db := metadata.FakeMemoryDB()
 	expectedOtherDynakube := metadata.NewDynakube(otherDkName, tenantUUID, "v1", "", 0)
-	db.InsertDynakube(ctx, expectedOtherDynakube)
+	_ = db.InsertDynakube(ctx, expectedOtherDynakube)
 	provisioner := &OneAgentProvisioner{
 		db: db,
 	}
@@ -537,23 +590,23 @@ func TestProvisioner_CreateDynakube(t *testing.T) {
 	require.NoError(t, err)
 
 	dynakube, err := db.GetDynakube(ctx, dkName)
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakube)
-	assert.Equal(t, *newDynakube, *dynakube)
+	require.NoError(t, err)
+	require.NotNil(t, dynakube)
+	require.Equal(t, *newDynakube, *dynakube)
 
 	otherDynakube, err := db.GetDynakube(ctx, otherDkName)
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakube)
-	assert.Equal(t, *expectedOtherDynakube, *otherDynakube)
+	require.NoError(t, err)
+	require.NotNil(t, dynakube)
+	require.Equal(t, *expectedOtherDynakube, *otherDynakube)
 }
 
 func TestProvisioner_UpdateDynakube(t *testing.T) {
 	ctx := context.TODO()
 	db := metadata.FakeMemoryDB()
 	oldDynakube := metadata.NewDynakube(dkName, tenantUUID, "v1", "", 0)
-	db.InsertDynakube(ctx, oldDynakube)
+	_ = db.InsertDynakube(ctx, oldDynakube)
 	expectedOtherDynakube := metadata.NewDynakube(otherDkName, tenantUUID, "v1", "", 0)
-	db.InsertDynakube(ctx, expectedOtherDynakube)
+	_ = db.InsertDynakube(ctx, expectedOtherDynakube)
 
 	provisioner := &OneAgentProvisioner{
 		db: db,
@@ -564,14 +617,14 @@ func TestProvisioner_UpdateDynakube(t *testing.T) {
 	require.NoError(t, err)
 
 	dynakube, err := db.GetDynakube(ctx, dkName)
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakube)
-	assert.Equal(t, *newDynakube, *dynakube)
+	require.NoError(t, err)
+	require.NotNil(t, dynakube)
+	require.Equal(t, *newDynakube, *dynakube)
 
 	otherDynakube, err := db.GetDynakube(ctx, otherDkName)
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakube)
-	assert.Equal(t, *expectedOtherDynakube, *otherDynakube)
+	require.NoError(t, err)
+	require.NotNil(t, dynakube)
+	require.Equal(t, *expectedOtherDynakube, *otherDynakube)
 }
 
 func setupTestZip(t *testing.T, fs afero.Fs) afero.File {
@@ -599,10 +652,8 @@ func TestHandleMetadata(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: dkName,
 		},
-		Status: dynatracev1beta1.DynaKubeStatus{
-			ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-				TenantUUID: testTenantUUID,
-			},
+		Spec: dynatracev1beta1.DynaKubeSpec{
+			APIURL: testAPIURL,
 		},
 	}
 	provisioner := &OneAgentProvisioner{
@@ -610,16 +661,16 @@ func TestHandleMetadata(t *testing.T) {
 	}
 	dynakubeMetadata, oldMetadata, err := provisioner.handleMetadata(ctx, instance)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakubeMetadata)
-	assert.NotNil(t, oldMetadata)
-	assert.Equal(t, dynatracev1beta1.DefaultMaxFailedCsiMountAttempts, dynakubeMetadata.MaxFailedMountAttempts)
+	require.NoError(t, err)
+	require.NotNil(t, dynakubeMetadata)
+	require.NotNil(t, oldMetadata)
+	require.Equal(t, dynatracev1beta1.DefaultMaxFailedCsiMountAttempts, dynakubeMetadata.MaxFailedMountAttempts)
 
 	instance.Annotations = map[string]string{dynatracev1beta1.AnnotationFeatureMaxFailedCsiMountAttempts: "5"}
 	dynakubeMetadata, oldMetadata, err = provisioner.handleMetadata(ctx, instance)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, dynakubeMetadata)
-	assert.NotNil(t, oldMetadata)
-	assert.Equal(t, 5, dynakubeMetadata.MaxFailedMountAttempts)
+	require.NoError(t, err)
+	require.NotNil(t, dynakubeMetadata)
+	require.NotNil(t, oldMetadata)
+	require.Equal(t, 5, dynakubeMetadata.MaxFailedMountAttempts)
 }

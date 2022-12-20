@@ -31,6 +31,7 @@ spec:
   template:
     metadata:
       annotations:
+        dynatrace.com/inject: "false"
         kubectl.kubernetes.io/default-container: provisioner
         cluster-autoscaler.kubernetes.io/enable-ds-eviction: "false"
         {{- if and (eq (default false .Values.apparmor) true) (ne .Values.platform "openshift") }}
@@ -87,12 +88,9 @@ spec:
           name: livez
           protocol: TCP
         resources:
-          limits:
-            cpu: 150m
-            memory: 100Mi
-          requests:
-            cpu: 150m
-            memory: 100Mi
+          {{- if .Values.csidriver.server.resources }}
+          {{- toYaml .Values.csidriver.server.resources | nindent 10 }}
+          {{- end }}
         securityContext:
           runAsUser: 0
           privileged: true # Needed for mountPropagation
@@ -112,8 +110,7 @@ spec:
           mountPropagation: Bidirectional
           name: mountpoint-dir
         - mountPath: /data
-          name: plugin-dir
-          subPath: data
+          name: data-dir
           mountPropagation: Bidirectional
         - name: tmp-dir
           mountPath: /tmp
@@ -129,6 +126,10 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: metadata.namespace
+          {{- if .Values.csidriver.maxUnmountedVolumeAge }}
+          - name: MAX_UNMOUNTED_VOLUME_AGE
+            value: {{ .Values.csidriver.maxUnmountedVolumeAge}}
+          {{- end }}
         livenessProbe:
           failureThreshold: 3
           httpGet:
@@ -144,12 +145,9 @@ spec:
             name: livez
             protocol: TCP
         resources:
-          limits:
-            cpu: {{ default "300m" ((.Values.csidriver).limits).cpu }}
-            memory: {{ default "100Mi" ((.Values.csidriver).limits).memory }}
-          requests:
-            cpu: {{ default "300m" ((.Values.csidriver).requests).cpu }}
-            memory: {{ default "100Mi" ((.Values.csidriver).requests).memory }}
+          {{- if .Values.csidriver.provisioner.resources }}
+          {{- toYaml .Values.csidriver.provisioner.resources | nindent 10 }}
+          {{- end }}
         securityContext:
           runAsUser: 0
           privileged: true # Needed for mountPropagation
@@ -164,8 +162,7 @@ spec:
         terminationMessagePolicy: File
         volumeMounts:
           - mountPath: /data
-            name: plugin-dir
-            subPath: data
+            name: data-dir
             mountPropagation: Bidirectional
           - mountPath: /tmp
             name: tmp-dir
@@ -197,12 +194,9 @@ spec:
           successThreshold: 1
           timeoutSeconds: 15
         resources:
-            limits:
-              cpu: 100m
-              memory: 100Mi
-            requests:
-              cpu: 10m
-              memory: 20Mi
+          {{- if .Values.csidriver.registrar.resources }}
+          {{- toYaml .Values.csidriver.registrar.resources | nindent 10 }}
+          {{- end }}
         securityContext:
           runAsUser: 0
           privileged: false
@@ -230,12 +224,9 @@ spec:
         command:
         - livenessprobe
         resources:
-          limits:
-            cpu: 100m
-            memory: 100Mi
-          requests:
-            cpu: 10m
-            memory: 20Mi
+          {{- if .Values.csidriver.livenessprobe.resources }}
+          {{- toYaml .Values.csidriver.livenessprobe.resources | nindent 10 }}
+          {{- end }}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         securityContext:
@@ -267,6 +258,10 @@ spec:
         hostPath:
           path: {{ include "dynatrace-operator.CSIPluginDir" . }}
           type: DirectoryOrCreate
+      - name: data-dir
+        hostPath:
+          path: {{ include "dynatrace-operator.CSIDataDir" . }}
+          type: DirectoryOrCreate
         # This volume is where the driver mounts volumes
       - name: mountpoint-dir
         hostPath:
@@ -285,9 +280,19 @@ spec:
       {{- if .Values.csidriver.nodeSelector }}
       nodeSelector: {{- toYaml .Values.csidriver.nodeSelector | nindent 8 }}
       {{- end }}
-      {{- if .Values.csidriver.tolerations }}
-      tolerations: {{- toYaml .Values.csidriver.tolerations | nindent 8 }}
-      {{- end }}
+      tolerations:
+        {{- if .Values.csidriver.tolerations }}
+        {{- toYaml .Values.csidriver.tolerations | nindent 8 }}
+        {{- end }}
+        - key: kubernetes.io/arch
+          value: arm64
+          effect: NoSchedule
+        - key: kubernetes.io/arch
+          value: amd64
+          effect: NoSchedule
+        - key: ToBeDeletedByClusterAutoscaler
+          operator: Exists
+          effect: NoSchedule
   updateStrategy:
     rollingUpdate:
       maxUnavailable: 1

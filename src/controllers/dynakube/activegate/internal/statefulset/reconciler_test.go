@@ -22,7 +22,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-func TestNewReconiler(t *testing.T) {
+const (
+	testName      = "test-name"
+	testNamespace = "test-namespace"
+	testValue     = "test-value"
+	testUID       = "test-uid"
+	testToken     = "test-token"
+)
+
+func TestNewReconciler(t *testing.T) {
 	createDefaultReconciler(t)
 }
 
@@ -34,6 +42,13 @@ func createDefaultReconciler(t *testing.T) *Reconciler {
 				Name: kubesystem.Namespace,
 				UID:  testUID,
 			},
+		}).
+		WithObjects(&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dynatracev1beta1.AuthTokenSecretSuffix,
+				Namespace: testNamespace,
+			},
+			Data: map[string][]byte{authtoken.ActiveGateAuthTokenName: []byte(testToken)},
 		}).
 		Build()
 	instance := &dynatracev1beta1.DynaKube{
@@ -50,10 +65,11 @@ func createDefaultReconciler(t *testing.T) *Reconciler {
 	capability.NewRoutingCapability(instance)
 
 	r := NewReconciler(clt, clt, scheme.Scheme, instance, capability.NewRoutingCapability(instance))
+	r.dynakube.Annotations = map[string]string{}
 	require.NotNil(t, r)
-	require.NotNil(t, r.Client)
+	require.NotNil(t, r.client)
 	require.NotNil(t, r.scheme)
-	require.NotNil(t, r.Dynakube)
+	require.NotNil(t, r.dynakube)
 
 	return r
 }
@@ -61,38 +77,35 @@ func createDefaultReconciler(t *testing.T) *Reconciler {
 func TestReconcile(t *testing.T) {
 	t.Run(`create stateful set`, func(t *testing.T) {
 		r := createDefaultReconciler(t)
-		update, err := r.Reconcile()
+		err := r.Reconcile()
 
-		assert.True(t, update)
 		assert.NoError(t, err)
 
 		statefulSet := &appsv1.StatefulSet{}
-		err = r.Get(context.TODO(), client.ObjectKey{Name: r.Dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.Dynakube.Namespace}, statefulSet)
+		err = r.client.Get(context.TODO(), client.ObjectKey{Name: r.dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.dynakube.Namespace}, statefulSet)
 
 		assert.NotNil(t, statefulSet)
 		assert.NoError(t, err)
 	})
 	t.Run(`update stateful set`, func(t *testing.T) {
 		r := createDefaultReconciler(t)
-		update, err := r.Reconcile()
+		err := r.Reconcile()
 
-		assert.True(t, update)
 		assert.NoError(t, err)
 
 		statefulSet := &appsv1.StatefulSet{}
-		err = r.Get(context.TODO(), client.ObjectKey{Name: r.Dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.Dynakube.Namespace}, statefulSet)
+		err = r.client.Get(context.TODO(), client.ObjectKey{Name: r.dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.dynakube.Namespace}, statefulSet)
 
 		assert.NotNil(t, statefulSet)
 		assert.NoError(t, err)
 
-		r.Dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
-		update, err = r.Reconcile()
+		r.dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
+		err = r.Reconcile()
 
-		assert.True(t, update)
 		assert.NoError(t, err)
 
 		newStatefulSet := &appsv1.StatefulSet{}
-		err = r.Get(context.TODO(), client.ObjectKey{Name: r.Dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.Dynakube.Namespace}, newStatefulSet)
+		err = r.client.Get(context.TODO(), client.ObjectKey{Name: r.dynakube.Name + "-" + r.capability.ShortName(), Namespace: r.dynakube.Namespace}, newStatefulSet)
 
 		assert.NotNil(t, statefulSet)
 		assert.NoError(t, err)
@@ -100,7 +113,7 @@ func TestReconcile(t *testing.T) {
 		found := 0
 		for _, vm := range newStatefulSet.Spec.Template.Spec.Containers[0].VolumeMounts {
 			if vm.Name == InternalProxySecretVolumeName {
-				found = found + 1
+				found++
 			}
 		}
 		assert.Equal(t, 4, found)
@@ -109,8 +122,7 @@ func TestReconcile(t *testing.T) {
 
 func TestReconcile_GetStatefulSet(t *testing.T) {
 	r := createDefaultReconciler(t)
-	update, err := r.Reconcile()
-	assert.True(t, update)
+	err := r.Reconcile()
 	assert.NoError(t, err)
 
 	desiredSts, err := r.buildDesiredStatefulSet()
@@ -120,7 +132,7 @@ func TestReconcile_GetStatefulSet(t *testing.T) {
 	desiredSts.Kind = "StatefulSet"
 	desiredSts.APIVersion = "apps/v1"
 	desiredSts.ResourceVersion = "1"
-	err = controllerutil.SetControllerReference(r.Dynakube, desiredSts, r.scheme)
+	err = controllerutil.SetControllerReference(r.dynakube, desiredSts, r.scheme)
 	require.NoError(t, err)
 
 	sts, err := r.getStatefulSet(desiredSts)
@@ -162,7 +174,7 @@ func TestReconcile_UpdateStatefulSetIfOutdated(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, updated)
 
-	r.Dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
+	r.dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
 	desiredSts, err = r.buildDesiredStatefulSet()
 	require.NoError(t, err)
 
@@ -172,55 +184,85 @@ func TestReconcile_UpdateStatefulSetIfOutdated(t *testing.T) {
 }
 
 func TestReconcile_DeleteStatefulSetIfOldLabelsAreUsed(t *testing.T) {
-	r := createDefaultReconciler(t)
-	desiredSts, err := r.buildDesiredStatefulSet()
-	require.NoError(t, err)
-	require.NotNil(t, desiredSts)
+	t.Run("statefulset is deleted when old labels are used", func(t *testing.T) {
+		r := createDefaultReconciler(t)
+		desiredSts, err := r.buildDesiredStatefulSet()
+		require.NoError(t, err)
+		require.NotNil(t, desiredSts)
 
-	deleted, err := r.deleteStatefulSetIfOldLabelsAreUsed(desiredSts)
-	assert.Error(t, err)
-	assert.False(t, deleted)
-	assert.True(t, k8serrors.IsNotFound(errors.Cause(err)))
+		deleted, err := r.deleteStatefulSetIfSelectorChanged(desiredSts)
+		assert.Error(t, err)
+		assert.False(t, deleted)
+		assert.True(t, k8serrors.IsNotFound(errors.Cause(err)))
 
-	created, err := r.createStatefulSetIfNotExists(desiredSts)
-	require.True(t, created)
-	require.NoError(t, err)
+		created, err := r.createStatefulSetIfNotExists(desiredSts)
+		require.True(t, created)
+		require.NoError(t, err)
 
-	deleted, err = r.deleteStatefulSetIfOldLabelsAreUsed(desiredSts)
-	assert.NoError(t, err)
-	assert.False(t, deleted)
+		deleted, err = r.deleteStatefulSetIfSelectorChanged(desiredSts)
+		assert.NoError(t, err)
+		assert.False(t, deleted)
 
-	r.Dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
-	desiredSts, err = r.buildDesiredStatefulSet()
-	require.NoError(t, err)
-	correctLabels := desiredSts.Labels
-	desiredSts.Labels = map[string]string{"activegate": "dynakube"}
-	err = r.Update(context.TODO(), desiredSts)
-	assert.NoError(t, err)
+		r.dynakube.Spec.Proxy = &dynatracev1beta1.DynaKubeProxy{Value: testValue}
+		desiredSts, err = r.buildDesiredStatefulSet()
+		require.NoError(t, err)
 
-	desiredSts.Labels = correctLabels
-	deleted, err = r.deleteStatefulSetIfOldLabelsAreUsed(desiredSts)
-	assert.NoError(t, err)
-	assert.True(t, deleted)
+		correctLabels := desiredSts.Spec.Selector.MatchLabels
+		desiredSts.Spec.Selector.MatchLabels = map[string]string{"activegate": "dynakube"}
+		err = r.client.Update(context.TODO(), desiredSts)
+		assert.NoError(t, err)
+
+		desiredSts.Spec.Selector.MatchLabels = correctLabels
+		deleted, err = r.deleteStatefulSetIfSelectorChanged(desiredSts)
+		assert.NoError(t, err)
+		assert.True(t, deleted)
+	})
+	t.Run("statefulset is not deleted when custom labels are used", func(t *testing.T) {
+		r := createDefaultReconciler(t)
+		appliedStatefulset, err := r.buildDesiredStatefulSet()
+
+		require.NoError(t, err)
+		require.NotNil(t, appliedStatefulset)
+
+		created, err := r.createStatefulSetIfNotExists(appliedStatefulset)
+
+		require.True(t, created)
+		require.NoError(t, err)
+
+		appliedStatefulset.Labels[testName] = testValue
+		err = r.client.Update(context.TODO(), appliedStatefulset)
+
+		require.NoError(t, err)
+
+		desiredStatefulset, err := r.buildDesiredStatefulSet()
+
+		require.NoError(t, err)
+
+		deleted, err := r.deleteStatefulSetIfSelectorChanged(desiredStatefulset)
+
+		assert.NoError(t, err)
+		assert.False(t, deleted)
+	})
 }
 
 func TestReconcile_GetCustomPropertyHash(t *testing.T) {
 	r := createDefaultReconciler(t)
 	hash, err := r.calculateActiveGateConfigurationHash()
 	assert.NoError(t, err)
-	assert.Empty(t, hash)
+	assert.NotEmpty(t, hash)
 
-	r.Dynakube.Spec.Routing.CustomProperties = &dynatracev1beta1.DynaKubeValueSource{Value: testValue}
+	r.dynakube.Spec.Routing.CustomProperties = &dynatracev1beta1.DynaKubeValueSource{Value: testValue}
 	hash, err = r.calculateActiveGateConfigurationHash()
 	assert.NoError(t, err)
 	assert.NotEmpty(t, hash)
 
-	r.Dynakube.Spec.Routing.CustomProperties = &dynatracev1beta1.DynaKubeValueSource{ValueFrom: testName}
+	r.dynakube.Spec.Routing.CustomProperties = &dynatracev1beta1.DynaKubeValueSource{ValueFrom: testName}
 	hash, err = r.calculateActiveGateConfigurationHash()
+	r.dynakube.Annotations[dynatracev1beta1.AnnotationFeatureActiveGateAuthToken] = "false"
 	assert.Error(t, err)
 	assert.Empty(t, hash)
 
-	err = r.Create(context.TODO(), &corev1.Secret{
+	err = r.client.Create(context.TODO(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testName,
 			Namespace: testNamespace,
@@ -240,27 +282,77 @@ func TestReconcile_GetActiveGateAuthTokenHash(t *testing.T) {
 	r := createDefaultReconciler(t)
 	hash, err := r.calculateActiveGateConfigurationHash()
 	assert.NoError(t, err)
-	assert.Empty(t, hash)
+	assert.NotEmpty(t, hash)
 
-	r.Dynakube.Annotations = make(map[string]string)
-	r.Dynakube.Annotations[dynatracev1beta1.AnnotationFeatureEnableActiveGateAuthToken] = "true"
-
-	hash, err = r.calculateActiveGateConfigurationHash()
-	assert.Error(t, err)
-	assert.Empty(t, hash)
-
-	err = r.Create(context.TODO(), &corev1.Secret{
+	err = r.client.Create(context.TODO(), &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      r.Dynakube.ActiveGateAuthTokenSecret(),
-			Namespace: r.Dynakube.Namespace,
+			Name:      r.dynakube.ActiveGateAuthTokenSecret(),
+			Namespace: r.dynakube.Namespace,
 		},
 		Data: map[string][]byte{
 			authtoken.ActiveGateAuthTokenName: []byte(testValue),
 		},
 	})
-	require.NoError(t, err)
+	require.Error(t, err)
 
+	r = createDefaultReconciler(t)
+	r.dynakube.Annotations[dynatracev1beta1.AnnotationFeatureActiveGateAuthToken] = "false"
 	hash, err = r.calculateActiveGateConfigurationHash()
 	assert.NoError(t, err)
-	assert.NotEmpty(t, hash)
+	assert.Empty(t, hash)
+}
+
+func TestManageStatefulSet(t *testing.T) {
+	t.Run("do not delete statefulset if custom labels were added", func(t *testing.T) {
+		r := createDefaultReconciler(t)
+		desiredStatefulSet, err := r.buildDesiredStatefulSet()
+
+		require.NoError(t, err)
+
+		err = r.manageStatefulSet()
+		assert.NoError(t, err)
+
+		actualStatefulSet, err := r.getStatefulSet(desiredStatefulSet)
+		assert.NoError(t, err)
+		assert.NotNil(t, actualStatefulSet)
+
+		actualStatefulSet.Labels[testName] = testValue
+		err = r.client.Update(context.TODO(), actualStatefulSet)
+
+		require.NoError(t, err)
+
+		err = r.manageStatefulSet()
+		assert.NoError(t, err)
+
+		actualStatefulSet, err = r.getStatefulSet(desiredStatefulSet)
+		assert.NoError(t, err)
+		assert.NotNil(t, actualStatefulSet)
+		assert.Contains(t, actualStatefulSet.Labels, testName)
+	})
+	t.Run("delete statefulset if selector differs", func(t *testing.T) {
+		r := createDefaultReconciler(t)
+		desiredStatefulSet, err := r.buildDesiredStatefulSet()
+
+		require.NoError(t, err)
+
+		err = r.manageStatefulSet()
+		assert.NoError(t, err)
+
+		actualStatefulSet, err := r.getStatefulSet(desiredStatefulSet)
+		assert.NoError(t, err)
+		assert.NotNil(t, actualStatefulSet)
+
+		actualStatefulSet.Spec.Selector.MatchLabels["activegate"] = testValue
+		err = r.client.Update(context.TODO(), actualStatefulSet)
+
+		require.NoError(t, err)
+
+		err = r.manageStatefulSet()
+		assert.NoError(t, err)
+
+		actualStatefulSet, err = r.getStatefulSet(desiredStatefulSet)
+		assert.Error(t, err)
+		assert.Nil(t, actualStatefulSet)
+		assert.True(t, k8serrors.IsNotFound(err))
+	})
 }

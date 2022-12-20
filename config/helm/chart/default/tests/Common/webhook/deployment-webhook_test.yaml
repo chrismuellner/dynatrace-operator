@@ -39,6 +39,7 @@ tests:
       - equal:
           path: spec.template.metadata.annotations
           value:
+            dynatrace.com/inject: "false"
             kubectl.kubernetes.io/default-container: webhook
       - isNotEmpty:
           path: spec.template.metadata.labels
@@ -77,6 +78,13 @@ tests:
                           operator: In
                           values:
                             - linux
+            tolerations:
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: arm64
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: amd64
             containers:
               - name: webhook
                 args:
@@ -105,11 +113,9 @@ tests:
                   requests:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                   limits:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                 volumeMounts:
                   - name: certs-dir
                     mountPath: /tmp/k8s-webhook-server/serving-certs/
@@ -131,12 +137,22 @@ tests:
     set:
       platform: kubernetes
       webhook.tolerations:
-        test-key: test-value
+        - effect: NoSchedule
+          key: a-special-taint
+          value: a-special-value
     asserts:
     - equal:
         path: spec.template.spec.tolerations
         value:
-          test-key: test-value
+          - effect: NoSchedule
+            key: a-special-taint
+            value: a-special-value
+          - effect: NoSchedule
+            key: kubernetes.io/arch
+            value: arm64
+          - effect: NoSchedule
+            key: kubernetes.io/arch
+            value: amd64
 
   - it: should have nodeSelectors if set
     set:
@@ -186,6 +202,7 @@ tests:
       - equal:
           path: spec.template.metadata.annotations
           value:
+            dynatrace.com/inject: "false"
             kubectl.kubernetes.io/default-container: webhook
       - isNotEmpty:
           path: spec.template.metadata.labels
@@ -209,6 +226,13 @@ tests:
                           operator: In
                           values:
                             - linux
+            tolerations:
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: arm64
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: amd64
             containers:
               - name: webhook
                 args:
@@ -237,11 +261,9 @@ tests:
                   requests:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                   limits:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                 volumeMounts:
                   - name: certs-dir
                     mountPath: /tmp/k8s-webhook-server/serving-certs/
@@ -298,6 +320,7 @@ tests:
       - equal:
           path: spec.template.metadata.annotations
           value:
+            dynatrace.com/inject: "false"
             kubectl.kubernetes.io/default-container: webhook
       - isNotEmpty:
           path: spec.template.metadata.labels
@@ -321,6 +344,13 @@ tests:
                           operator: In
                           values:
                             - linux
+            tolerations:
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: arm64
+              - effect: NoSchedule
+                key: kubernetes.io/arch
+                value: amd64
             containers:
               - name: webhook
                 args:
@@ -349,11 +379,9 @@ tests:
                   requests:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                   limits:
                     cpu: 300m
                     memory: 128Mi
-                    ephemeral-storage: 10Mi
                 volumeMounts:
                   - name: certs-dir
                     mountPath: /tmp/k8s-webhook-server/serving-certs/
@@ -417,6 +445,7 @@ tests:
       - equal:
           path: spec.template.metadata.annotations
           value:
+            dynatrace.com/inject: "false"
             kubectl.kubernetes.io/default-container: webhook
             testKey: testValue
 
@@ -431,3 +460,18 @@ tests:
       - equal:
           path: spec.template.metadata.labels.testKey
           value: testValue
+
+  - it: should set ephemeral-storage request/limits
+    set:
+      platform: kubernetes
+      webhook.requests:
+        ephemeral-storage: 320
+      webhook.limits:
+        ephemeral-storage: 420
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.ephemeral-storage
+          value: 420
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.ephemeral-storage
+          value: 320

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	dtcsi "github.com/Dynatrace/dynatrace-operator/src/controllers/csi"
 	"github.com/Dynatrace/dynatrace-operator/src/controllers/csi/metadata"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
@@ -47,7 +46,6 @@ func TestRunBinaryGarbageCollection(t *testing.T) {
 		assert.Equal(t, float64(1), testutil.ToFloat64(gcRunsMetric))
 		assert.Equal(t, float64(0), testutil.ToFloat64(foldersRemovedMetric))
 		assert.Equal(t, float64(0), testutil.ToFloat64(reclaimedMemoryMetric))
-
 	})
 	t.Run("ignores latest", func(t *testing.T) {
 		resetMetrics()
@@ -116,10 +114,10 @@ func TestBinaryGarbageCollector_getUsedVersions(t *testing.T) {
 
 func NewMockGarbageCollector() *CSIGarbageCollector {
 	return &CSIGarbageCollector{
-		opts: dtcsi.CSIOptions{RootDir: testRootDir},
-		fs:   afero.NewMemMapFs(),
-		db:   metadata.FakeMemoryDB(),
-		path: metadata.PathResolver{RootDir: testRootDir},
+		fs:                    afero.NewMemMapFs(),
+		db:                    metadata.FakeMemoryDB(),
+		path:                  metadata.PathResolver{RootDir: testRootDir},
+		maxUnmountedVolumeAge: defaultMaxUnmountedCsiVolumeAge,
 	}
 }
 

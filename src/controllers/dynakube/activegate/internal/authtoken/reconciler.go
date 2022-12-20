@@ -5,6 +5,7 @@ import (
 	"time"
 
 	dynatracev1beta1 "github.com/Dynatrace/dynatrace-operator/src/api/v1beta1"
+	"github.com/Dynatrace/dynatrace-operator/src/controllers"
 	"github.com/Dynatrace/dynatrace-operator/src/dtclient"
 	"github.com/Dynatrace/dynatrace-operator/src/kubeobjects"
 	"github.com/pkg/errors"
@@ -16,23 +17,26 @@ import (
 )
 
 const (
-	ActiveGateAuthTokenName   = "auth-token"
-	AuthTokenRotationInterval = time.Hour * 24 * 30
+	ActiveGateAuthTokenName = "auth-token"
+
+	// Buffer to avoid warnings in the UI
+	AuthTokenBuffer           = time.Hour * 24
+	AuthTokenRotationInterval = time.Hour*24*30 - AuthTokenBuffer
 )
 
+var _ controllers.Reconciler = &Reconciler{}
+
 type Reconciler struct {
-	client.Client
+	client    client.Client
 	apiReader client.Reader
 	dynakube  *dynatracev1beta1.DynaKube
 	scheme    *runtime.Scheme
 	dtc       dtclient.Client
 }
 
-var _ kubeobjects.Reconciler = (*Reconciler)(nil)
-
-func NewReconciler(clt client.Client, apiReader client.Reader, scheme *runtime.Scheme, dynakube *dynatracev1beta1.DynaKube, dtc dtclient.Client) *Reconciler {
+func NewReconciler(clt client.Client, apiReader client.Reader, scheme *runtime.Scheme, dynakube *dynatracev1beta1.DynaKube, dtc dtclient.Client) *Reconciler { //nolint:revive // argument-limit doesn't apply to constructors
 	return &Reconciler{
-		Client:    clt,
+		client:    clt,
 		apiReader: apiReader,
 		scheme:    scheme,
 		dynakube:  dynakube,
@@ -40,16 +44,16 @@ func NewReconciler(clt client.Client, apiReader client.Reader, scheme *runtime.S
 	}
 }
 
-func (r *Reconciler) Reconcile() (update bool, err error) {
-	_, err = r.reconcileAuthTokenSecret()
+func (r *Reconciler) Reconcile() error {
+	err := r.reconcileAuthTokenSecret()
 	if err != nil {
-		return false, errors.Errorf("failed to create activeGateAuthToken secret: %v", err)
+		return errors.Errorf("failed to create activeGateAuthToken secret: %v", err)
 	}
 
-	return true, nil
+	return nil
 }
 
-func (r *Reconciler) reconcileAuthTokenSecret() (*corev1.Secret, error) {
+func (r *Reconciler) reconcileAuthTokenSecret() error {
 	var secret corev1.Secret
 	err := r.apiReader.Get(context.TODO(),
 		client.ObjectKey{Name: r.dynakube.ActiveGateAuthTokenSecret(), Namespace: r.dynakube.Namespace},
@@ -59,23 +63,23 @@ func (r *Reconciler) reconcileAuthTokenSecret() (*corev1.Secret, error) {
 			log.Info("creating activeGateAuthToken secret")
 			return r.ensureAuthTokenSecret()
 		}
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 	if isSecretOutdated(&secret) {
 		log.Info("activeGateAuthToken is outdated, creating new one")
 		if err := r.deleteSecret(&secret); err != nil {
-			return nil, errors.WithStack(err)
+			return errors.WithStack(err)
 		}
 		return r.ensureAuthTokenSecret()
 	}
 
-	return &secret, nil
+	return nil
 }
 
-func (r *Reconciler) ensureAuthTokenSecret() (*corev1.Secret, error) {
+func (r *Reconciler) ensureAuthTokenSecret() error {
 	agSecretData, err := r.getActiveGateAuthToken()
 	if err != nil {
-		return nil, errors.Errorf("failed to create secret '%s': %v", r.dynakube.ActiveGateAuthTokenSecret(), err)
+		return errors.Errorf("failed to create secret '%s': %v", r.dynakube.ActiveGateAuthTokenSecret(), err)
 	}
 	return r.createSecret(agSecretData)
 }
@@ -90,22 +94,22 @@ func (r *Reconciler) getActiveGateAuthToken() (map[string][]byte, error) {
 	}, nil
 }
 
-func (r *Reconciler) createSecret(secretData map[string][]byte) (*corev1.Secret, error) {
+func (r *Reconciler) createSecret(secretData map[string][]byte) error {
 	secretName := r.dynakube.ActiveGateAuthTokenSecret()
 	secret := kubeobjects.NewSecret(secretName, r.dynakube.Namespace, secretData)
 	if err := controllerutil.SetControllerReference(r.dynakube, secret, r.scheme); err != nil {
-		return nil, errors.WithStack(err)
+		return errors.WithStack(err)
 	}
 
-	err := r.Create(context.TODO(), secret)
+	err := r.client.Create(context.TODO(), secret)
 	if err != nil {
-		return nil, errors.Errorf("failed to create secret '%s': %v", secretName, err)
+		return errors.Errorf("failed to create secret '%s': %v", secretName, err)
 	}
-	return secret, nil
+	return nil
 }
 
 func (r *Reconciler) deleteSecret(secret *corev1.Secret) error {
-	if err := r.Client.Delete(context.TODO(), secret); err != nil && !k8serrors.IsNotFound(err) {
+	if err := r.client.Delete(context.TODO(), secret); err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 	return nil

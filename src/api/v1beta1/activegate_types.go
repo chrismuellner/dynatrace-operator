@@ -48,6 +48,12 @@ var (
 		ShortName:    "statsd-ingest",
 		ArgumentName: "extension_controller",
 	}
+
+	SyntheticCapability = ActiveGateCapability{
+		DisplayName:  "synthetic",
+		ShortName:    "synthetic",
+		ArgumentName: "synthetic,beacon_forwarder,beacon_forwarder_synthetic",
+	}
 )
 
 var ActiveGateDisplayNames = map[CapabilityDisplayName]struct{}{
@@ -56,6 +62,7 @@ var ActiveGateDisplayNames = map[CapabilityDisplayName]struct{}{
 	MetricsIngestCapability.DisplayName: {},
 	DynatraceApiCapability.DisplayName:  {},
 	StatsdIngestCapability.DisplayName:  {},
+	SyntheticCapability.DisplayName:     {},
 }
 
 type ActiveGateSpec struct {
@@ -80,6 +87,10 @@ type ActiveGateSpec struct {
 	// name. If not specified the setting will be removed from the StatefulSet.
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Priority Class name",order=23,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced","urn:alm:descriptor:io.kubernetes:PriorityClass"}
 	PriorityClassName string `json:"priorityClassName,omitempty"`
+
+	// Optional: Adds additional annotations to the ActiveGate pods
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Annotations",order=27,xDescriptors={"urn:alm:descriptor:com.tectonic.ui:advanced","urn:alm:descriptor:com.tectonic.ui:text"}
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // CapabilityProperties is a struct which can be embedded by ActiveGate capabilities

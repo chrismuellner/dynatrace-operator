@@ -1,12 +1,16 @@
 package webhook
 
 import (
+	"context"
+
 	"github.com/Dynatrace/dynatrace-operator/src/api/v1alpha1"
 	dynatracev1beta1 "github.com/Dynatrace/dynatrace-operator/src/api/v1beta1"
 	"github.com/Dynatrace/dynatrace-operator/src/cmd/certificates"
 	"github.com/Dynatrace/dynatrace-operator/src/cmd/config"
 	cmdManager "github.com/Dynatrace/dynatrace-operator/src/cmd/manager"
+	"github.com/Dynatrace/dynatrace-operator/src/kubeobjects"
 	"github.com/Dynatrace/dynatrace-operator/src/kubesystem"
+	"github.com/Dynatrace/dynatrace-operator/src/version"
 	"github.com/Dynatrace/dynatrace-operator/src/webhook"
 	"github.com/Dynatrace/dynatrace-operator/src/webhook/mutation/namespace_mutator"
 	"github.com/Dynatrace/dynatrace-operator/src/webhook/mutation/pod_mutator"
@@ -52,7 +56,7 @@ func (builder CommandBuilder) SetManagerProvider(provider cmdManager.Provider) C
 
 func (builder CommandBuilder) GetManagerProvider() cmdManager.Provider {
 	if builder.managerProvider == nil {
-		builder.managerProvider = NewWebhookManagerProvider(certificateDirectory, certificateKeyFileName, certificateFileName)
+		builder.managerProvider = NewProvider(certificateDirectory, certificateKeyFileName, certificateFileName)
 	}
 
 	return builder.managerProvider
@@ -87,6 +91,8 @@ func addFlags(cmd *cobra.Command) {
 
 func (builder CommandBuilder) buildRun() func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
+		version.LogVersion()
+
 		kubeConfig, err := builder.configProvider.GetConfig()
 		if err != nil {
 			return err
@@ -96,11 +102,11 @@ func (builder CommandBuilder) buildRun() func(*cobra.Command, []string) error {
 		if err != nil {
 			return err
 		}
-
-		isDeployedViaOLM, err := kubesystem.IsDeployedViaOlm(webhookManager.GetAPIReader(), builder.podName, builder.namespace)
+		webhookPod, err := kubeobjects.GetPod(context.TODO(), webhookManager.GetAPIReader(), builder.podName, builder.namespace)
 		if err != nil {
 			return err
 		}
+		isDeployedViaOLM := kubesystem.IsDeployedViaOlm(*webhookPod)
 
 		if !isDeployedViaOLM {
 			certificates.

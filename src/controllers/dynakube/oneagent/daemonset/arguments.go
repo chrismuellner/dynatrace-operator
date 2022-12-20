@@ -3,6 +3,7 @@ package daemonset
 import (
 	"fmt"
 
+	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube/activegate/consts"
 	"github.com/Dynatrace/dynatrace-operator/src/deploymentmetadata"
 	"github.com/Dynatrace/dynatrace-operator/src/version"
 )
@@ -15,7 +16,6 @@ const (
 )
 
 func (dsInfo *builderInfo) arguments() []string {
-
 	args := make([]string, 0)
 
 	args = dsInfo.appendHostInjectArgs(args)
@@ -23,6 +23,14 @@ func (dsInfo *builderInfo) arguments() []string {
 	args = dsInfo.appendNetworkZoneArg(args)
 	args = appendOperatorVersionArg(args)
 	args = dsInfo.appendMetadataArgs(args)
+	args = dsInfo.appendImmutableImageArgs(args)
+
+	return args
+}
+
+func (dsInfo *builderInfo) appendImmutableImageArgs(args []string) []string {
+	args = append(args, fmt.Sprintf("--set-tenant=$(%s)", consts.EnvDtTenant))
+	args = append(args, fmt.Sprintf("--set-server={$(%s)}", consts.EnvDtServer))
 	return args
 }
 

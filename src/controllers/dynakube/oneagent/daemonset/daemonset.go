@@ -4,6 +4,7 @@ import (
 	dynatracev1beta1 "github.com/Dynatrace/dynatrace-operator/src/api/v1beta1"
 	"github.com/Dynatrace/dynatrace-operator/src/kubeobjects"
 	"github.com/Dynatrace/dynatrace-operator/src/kubeobjects/address"
+	"github.com/Dynatrace/dynatrace-operator/src/webhook"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -137,14 +138,17 @@ func (dsInfo *builderInfo) BuildDaemonSet() (*appsv1.DaemonSet, error) {
 
 	appLabels := kubeobjects.NewAppLabels(kubeobjects.OneAgentComponentLabel, instance.Name,
 		dsInfo.deploymentType, versionLabelValue)
-	labels := kubeobjects.MergeLabels(
+	labels := kubeobjects.MergeMap(
 		appLabels.BuildLabels(),
 		dsInfo.hostInjectSpec.Labels,
 	)
 	maxUnavailable := intstr.FromInt(instance.FeatureOneAgentMaxUnavailable())
 	annotations := map[string]string{
-		annotationUnprivileged: annotationUnprivilegedValue,
+		annotationUnprivileged:            annotationUnprivilegedValue,
+		webhook.AnnotationDynatraceInject: "false",
 	}
+
+	annotations = kubeobjects.MergeMap(annotations, dsInfo.hostInjectSpec.Annotations)
 
 	result := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -224,7 +228,7 @@ func (dsInfo *builderInfo) podSpec() corev1.PodSpec {
 }
 
 func (dsInfo *builderInfo) serviceAccountName() string {
-	if dsInfo.instance != nil && dsInfo.instance.IsOneAgentPrivileged() {
+	if dsInfo.instance != nil && dsInfo.instance.NeedsOneAgentPrivileged() {
 		return privilegedServiceAccountName
 	}
 
@@ -235,7 +239,7 @@ func (dsInfo *builderInfo) immutableOneAgentImage() string {
 	if dsInfo.instance == nil {
 		return ""
 	}
-	return dsInfo.instance.ImmutableOneAgentImage()
+	return dsInfo.instance.OneAgentImage()
 }
 
 func (dsInfo *builderInfo) tolerations() []corev1.Toleration {
@@ -313,7 +317,7 @@ func (dsInfo *builderInfo) securityContext() *corev1.SecurityContext {
 		securityContext.RunAsGroup = address.Of(int64(1000))
 	}
 
-	if dsInfo.instance != nil && dsInfo.instance.IsOneAgentPrivileged() {
+	if dsInfo.instance != nil && dsInfo.instance.NeedsOneAgentPrivileged() {
 		securityContext.Privileged = address.Of(true)
 	} else {
 		securityContext.Capabilities = defaultSecurityContextCapabilities()

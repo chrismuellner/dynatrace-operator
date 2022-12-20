@@ -46,19 +46,14 @@ func TestUpdateAgent(t *testing.T) {
 					},
 				},
 			},
-			Status: dynatracev1beta1.DynaKubeStatus{
-				ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-					TenantUUID: tenantUUID,
-				},
-			},
 		}
 		updater := createTestAgentUrlUpdater(t, &dk)
 		processModuleCache := createTestProcessModuleConfigCache("1")
 		targetDir := updater.targetDir
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("InstallAgent", targetDir).
 			Return(true, nil)
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("UpdateProcessModuleConfig", targetDir, &testProcessModuleConfig).
 			Return(nil)
 
@@ -93,18 +88,15 @@ func TestUpdateAgent(t *testing.T) {
 			},
 			Status: dynatracev1beta1.DynaKubeStatus{
 				LatestAgentVersionUnixPaas: testVersion,
-				ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-					TenantUUID: tenantUUID,
-				},
 			},
 		}
 		updater := createTestAgentUrlUpdater(t, &dk)
 		processModuleCache := createTestProcessModuleConfigCache("other")
 		targetDir := updater.targetDir
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("InstallAgent", targetDir).
 			Return(false, nil)
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("UpdateProcessModuleConfig", targetDir, &testProcessModuleConfig).
 			Return(nil)
 		_ = updater.fs.MkdirAll(targetDir, 0755)
@@ -136,10 +128,10 @@ func TestUpdateAgent(t *testing.T) {
 		updater := createTestAgentUrlUpdater(t, &dk)
 		processModuleCache := createTestProcessModuleConfigCache("1")
 		targetDir := updater.targetDir
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("SetVersion", testVersion).
 			Return()
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("InstallAgent", targetDir).
 			Return(false, fmt.Errorf("BOOM"))
 
@@ -180,11 +172,6 @@ func TestUpdateAgent(t *testing.T) {
 					},
 				},
 			},
-			Status: dynatracev1beta1.DynaKubeStatus{
-				ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-					TenantUUID: tenantUUID,
-				},
-			},
 		}
 		mockedPullSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
@@ -197,10 +184,10 @@ func TestUpdateAgent(t *testing.T) {
 		}
 		updater := createTestAgentImageUpdater(t, &dk, mockedPullSecret)
 		targetDir := updater.targetDir
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("InstallAgent", targetDir).
 			Return(true, nil)
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("UpdateProcessModuleConfig", targetDir, &testProcessModuleConfig).
 			Return(nil)
 
@@ -222,6 +209,7 @@ func TestUpdateAgent(t *testing.T) {
 				Namespace: testNamespace,
 			},
 			Spec: dynatracev1beta1.DynaKubeSpec{
+				APIURL:           "https://" + testTenantUUID + ".dynatrace.com",
 				CustomPullSecret: pullSecretName,
 				TrustedCAs:       trustedCAName,
 				OneAgent: dynatracev1beta1.OneAgentSpec{
@@ -230,11 +218,6 @@ func TestUpdateAgent(t *testing.T) {
 							CodeModulesImage: image + ":" + tag,
 						},
 					},
-				},
-			},
-			Status: dynatracev1beta1.DynaKubeStatus{
-				ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-					TenantUUID: tenantUUID,
 				},
 			},
 		}
@@ -261,10 +244,10 @@ func TestUpdateAgent(t *testing.T) {
 		updater := createTestAgentImageUpdater(t, &dk, mockedObjects...)
 		targetDir := updater.targetDir
 
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("InstallAgent", targetDir).
 			Return(true, nil)
-		updater.installer.(*installer.InstallerMock).
+		updater.installer.(*installer.Mock).
 			On("UpdateProcessModuleConfig", targetDir, &testProcessModuleConfig).
 			Return(nil)
 
@@ -287,22 +270,19 @@ func testUpdateOneagent(t *testing.T, alreadyInstalled bool) {
 		},
 		Status: dynatracev1beta1.DynaKubeStatus{
 			LatestAgentVersionUnixPaas: testVersion,
-			ConnectionInfo: dynatracev1beta1.ConnectionInfoStatus{
-				TenantUUID: tenantUUID,
-			},
 		},
 	}
 	updater := createTestAgentUrlUpdater(t, &dk)
 	previousHash := "1"
 	processModuleCache := createTestProcessModuleConfigCache(previousHash)
 	targetDir := updater.targetDir
-	updater.installer.(*installer.InstallerMock).
+	updater.installer.(*installer.Mock).
 		On("SetVersion", testVersion).
 		Return()
-	updater.installer.(*installer.InstallerMock).
+	updater.installer.(*installer.Mock).
 		On("InstallAgent", targetDir).
 		Return(!alreadyInstalled, nil)
-	updater.installer.(*installer.InstallerMock).
+	updater.installer.(*installer.Mock).
 		On("UpdateProcessModuleConfig", targetDir, &testProcessModuleConfig).
 		Return(nil)
 	if alreadyInstalled {
@@ -322,9 +302,9 @@ func createTestAgentUrlUpdater(t *testing.T, dk *dynatracev1beta1.DynaKube) *age
 	fs := afero.NewMemMapFs()
 	rec := record.NewFakeRecorder(10)
 
-	updater, err := newAgentUrlUpdater(context.TODO(), fs, &mockedClient, testVersion, path, rec, dk)
+	updater, err := newAgentUrlUpdater(fs, &mockedClient, testVersion, path, rec, dk)
 	require.NoError(t, err)
-	updater.installer = &installer.InstallerMock{}
+	updater.installer = &installer.Mock{}
 
 	return updater
 }
@@ -337,7 +317,7 @@ func createTestAgentImageUpdater(t *testing.T, dk *dynatracev1beta1.DynaKube, ob
 
 	updater, err := newAgentImageUpdater(context.TODO(), fs, fake.NewClient(obj...), path, db, rec, dk)
 	require.NoError(t, err)
-	updater.installer = &installer.InstallerMock{}
+	updater.installer = &installer.Mock{}
 
 	return updater
 }

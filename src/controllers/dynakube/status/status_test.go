@@ -32,8 +32,8 @@ const (
 func TestStatusOptions(t *testing.T) {
 	// Checks if StatusOptions struct and its properties exists
 	_ = Options{
-		Dtc:       &dtclient.MockDynatraceClient{},
-		ApiClient: fake.NewClient(),
+		DtClient:  &dtclient.MockDynatraceClient{},
+		ApiReader: fake.NewClient(),
 	}
 }
 
@@ -48,8 +48,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 			},
 		})
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		dtc.On("GetCommunicationHostForClient").Return(dtclient.CommunicationHost{
@@ -58,7 +58,7 @@ func TestSetDynakubeStatus(t *testing.T) {
 			Port:     testPort,
 		}, nil)
 
-		dtc.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
+		dtc.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
 			CommunicationHosts: []dtclient.CommunicationHost{
 				{
 					Protocol: testProtocol,
@@ -71,12 +71,13 @@ func TestSetDynakubeStatus(t *testing.T) {
 					Port:     testAnotherPort,
 				},
 			},
-			TenantUUID: testUUID,
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: testUUID,
+			},
 		}, nil)
 
 		dtc.On("GetLatestAgentVersion", dtclient.OsUnix, dtclient.InstallerTypeDefault).Return(testVersion, nil)
 		dtc.On("GetLatestAgentVersion", dtclient.OsUnix, dtclient.InstallerTypePaaS).Return(testVersionPaas, nil)
-		dtc.On("GetAgentTenantInfo").Return(&dtclient.AgentTenantInfo{}, nil)
 
 		err := SetDynakubeStatus(instance, options)
 
@@ -110,8 +111,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 		dtc := &dtclient.MockDynatraceClient{}
 		clt := fake.NewClient()
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		err := SetDynakubeStatus(instance, options)
@@ -127,8 +128,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 			},
 		})
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		dtc.On("GetCommunicationHostForClient").Return(dtclient.CommunicationHost{}, fmt.Errorf(testError))
@@ -146,8 +147,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 			},
 		})
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		dtc.On("GetCommunicationHostForClient").Return(dtclient.CommunicationHost{
@@ -156,7 +157,7 @@ func TestSetDynakubeStatus(t *testing.T) {
 			Port:     testPort,
 		}, nil)
 
-		dtc.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{}, fmt.Errorf(testError))
+		dtc.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{}, fmt.Errorf(testError))
 
 		err := SetDynakubeStatus(instance, options)
 		assert.EqualError(t, err, testError)
@@ -171,8 +172,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 			},
 		})
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		dtc.On("GetCommunicationHostForClient").Return(dtclient.CommunicationHost{
@@ -181,7 +182,7 @@ func TestSetDynakubeStatus(t *testing.T) {
 			Port:     testPort,
 		}, nil)
 
-		dtc.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
+		dtc.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
 			CommunicationHosts: []dtclient.CommunicationHost{
 				{
 					Protocol: testProtocol,
@@ -194,7 +195,9 @@ func TestSetDynakubeStatus(t *testing.T) {
 					Port:     testAnotherPort,
 				},
 			},
-			TenantUUID: testUUID,
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: testUUID,
+			},
 		}, nil)
 
 		dtc.On("GetLatestAgentVersion", dtclient.OsUnix, dtclient.InstallerTypeDefault).Return("", fmt.Errorf(testError))
@@ -212,8 +215,8 @@ func TestSetDynakubeStatus(t *testing.T) {
 			},
 		})
 		options := Options{
-			Dtc:       dtc,
-			ApiClient: clt,
+			DtClient:  dtc,
+			ApiReader: clt,
 		}
 
 		dtc.On("GetCommunicationHostForClient").Return(dtclient.CommunicationHost{
@@ -222,7 +225,7 @@ func TestSetDynakubeStatus(t *testing.T) {
 			Port:     testPort,
 		}, nil)
 
-		dtc.On("GetConnectionInfo").Return(dtclient.ConnectionInfo{
+		dtc.On("GetOneAgentConnectionInfo").Return(dtclient.OneAgentConnectionInfo{
 			CommunicationHosts: []dtclient.CommunicationHost{
 				{
 					Protocol: testProtocol,
@@ -235,7 +238,9 @@ func TestSetDynakubeStatus(t *testing.T) {
 					Port:     testAnotherPort,
 				},
 			},
-			TenantUUID: testUUID,
+			ConnectionInfo: dtclient.ConnectionInfo{
+				TenantUUID: testUUID,
+			},
 		}, nil)
 
 		dtc.On("GetLatestAgentVersion", dtclient.OsUnix, dtclient.InstallerTypeDefault).Return(testVersion, nil)

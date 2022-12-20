@@ -254,8 +254,9 @@ func (access *SqliteAccess) setupDynakubeTable(ctx context.Context) error {
 
 func (access *SqliteAccess) executeAlterStatement(ctx context.Context, statement string) error {
 	if _, err := access.conn.ExecContext(ctx, statement); err != nil {
-		sqliteError := err.(sqlite3.Error)
-		if sqliteError.Code != sqlite3.ErrError {
+		sqliteErr := sqlite3.Error{}
+		isSqliteErr := errors.As(err, &sqliteErr)
+		if isSqliteErr && sqliteErr.Code != sqlite3.ErrError {
 			return errors.WithStack(err)
 		}
 	}
@@ -499,9 +500,7 @@ func (access *SqliteAccess) GetUsedVersions(ctx context.Context, tenantUUID stri
 		if err != nil {
 			return nil, errors.WithStack(errors.WithMessagef(err, "couldn't scan used version info for tenant uuid '%s'", tenantUUID))
 		}
-		if _, ok := versions[version]; !ok {
-			versions[version] = true
-		}
+		versions[version] = true
 	}
 	return versions, nil
 }

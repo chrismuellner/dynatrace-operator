@@ -1,9 +1,6 @@
 package capability
 
 import (
-	"fmt"
-	"strings"
-
 	dynatracev1beta1 "github.com/Dynatrace/dynatrace-operator/src/api/v1beta1"
 	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube/activegate/capability"
 	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube/activegate/consts"
@@ -13,10 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func CreateService(dynakube *dynatracev1beta1.DynaKube, feature string, servicePorts capability.AgServicePorts) *corev1.Service {
+func CreateService(dynakube *dynatracev1beta1.DynaKube, feature string) *corev1.Service {
 	var ports []corev1.ServicePort
 
-	if servicePorts.Webserver {
+	if dynakube.NeedsActiveGateServicePorts() {
 		ports = append(ports,
 			corev1.ServicePort{
 				Name:       consts.HttpsServicePortName,
@@ -33,7 +30,7 @@ func CreateService(dynakube *dynatracev1beta1.DynaKube, feature string, serviceP
 		)
 	}
 
-	if servicePorts.Statsd {
+	if dynakube.IsStatsdActiveGateEnabled() {
 		ports = append(ports,
 			corev1.ServicePort{
 				Name:       consts.StatsdIngestPortName,
@@ -57,19 +54,6 @@ func CreateService(dynakube *dynatracev1beta1.DynaKube, feature string, serviceP
 			Ports:    ports,
 		},
 	}
-}
-
-// BuildServiceHostName converts the name returned by BuildServiceName
-// into the variable name which Kubernetes uses to reference the associated service.
-// For more information see: https://kubernetes.io/docs/concepts/services-networking/service/
-func BuildServiceHostName(dynakubeName string, module string) string {
-	serviceName :=
-		strings.ReplaceAll(
-			strings.ToUpper(
-				capability.BuildServiceName(dynakubeName, module)),
-			"-", "_")
-
-	return fmt.Sprintf("$(%s_SERVICE_HOST):$(%s_SERVICE_PORT)", serviceName, serviceName)
 }
 
 func buildSelectorLabels(dynakubeName string) map[string]string {

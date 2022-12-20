@@ -5,11 +5,14 @@ import (
 	dtcsi "github.com/Dynatrace/dynatrace-operator/src/controllers/csi"
 	csivolumes "github.com/Dynatrace/dynatrace-operator/src/controllers/csi/driver/volumes"
 	hostvolumes "github.com/Dynatrace/dynatrace-operator/src/controllers/csi/driver/volumes/host"
+	"github.com/Dynatrace/dynatrace-operator/src/controllers/dynakube/connectioninfo"
 	corev1 "k8s.io/api/core/v1"
 )
 
 func prepareVolumeMounts(instance *dynatracev1beta1.DynaKube) []corev1.VolumeMount {
 	var volumeMounts []corev1.VolumeMount
+
+	volumeMounts = append(volumeMounts, getOneAgentSecretVolumeMount())
 
 	if instance != nil && instance.NeedsReadOnlyOneAgents() {
 		volumeMounts = append(volumeMounts, getReadOnlyRootMount())
@@ -25,6 +28,7 @@ func prepareVolumeMounts(instance *dynatracev1beta1.DynaKube) []corev1.VolumeMou
 	if instance != nil && instance.HasActiveGateCaCert() {
 		volumeMounts = append(volumeMounts, getActiveGateCaCertVolumeMount())
 	}
+
 	return volumeMounts
 }
 
@@ -39,6 +43,15 @@ func getActiveGateCaCertVolumeMount() corev1.VolumeMount {
 	return corev1.VolumeMount{
 		Name:      activeGateCaCertVolumeName,
 		MountPath: activeGateCaCertVolumeMountPath,
+	}
+}
+
+func getOneAgentSecretVolumeMount() corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      connectioninfo.TenantSecretVolumeName,
+		ReadOnly:  true,
+		MountPath: connectioninfo.TenantTokenMountPoint,
+		SubPath:   connectioninfo.TenantTokenName,
 	}
 }
 
@@ -68,6 +81,8 @@ func prepareVolumes(instance *dynatracev1beta1.DynaKube) []corev1.Volume {
 	if instance == nil {
 		return volumes
 	}
+
+	volumes = append(volumes, getOneAgentSecretVolume(instance))
 
 	if instance.NeedsReadOnlyOneAgents() {
 		volumes = append(volumes, getCSIStorageVolume(instance))
@@ -130,6 +145,17 @@ func getActiveGateCaCertVolume(instance *dynatracev1beta1.DynaKube) corev1.Volum
 						Path: "custom.pem",
 					},
 				},
+			},
+		},
+	}
+}
+
+func getOneAgentSecretVolume(instance *dynatracev1beta1.DynaKube) corev1.Volume {
+	return corev1.Volume{
+		Name: connectioninfo.TenantSecretVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: instance.OneagentTenantSecret(),
 			},
 		},
 	}
