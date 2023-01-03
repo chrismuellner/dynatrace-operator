@@ -118,6 +118,7 @@ jobs:
           version: ${{ needs.prepare.outputs.version }}
           registry: ${{ env.SCAN_REGISTRY }}
           repository: ${{ secrets.RHCC_REPOSITORY }}
+          skip-platform-suffix: true
       - name: Run preflight
         uses: ./.github/actions/preflight
         with:
