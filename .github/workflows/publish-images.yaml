@@ -107,7 +107,7 @@ jobs:
       - name: Login to Registry
         uses: docker/login-action@f4ef78c080cd8ba55a85445d5b36e214a81df20a # v2.1.0
         with:
-          registry: ${{ SCAN_REGISTRY }}
+          registry: ${{ env.SCAN_REGISTRY }}
           username: ${{ secrets.RHCC_USERNAME }}
           password: ${{ secrets.RHCC_PASSWORD }}
       - name: Push amd64 image to scan registry
@@ -116,13 +116,13 @@ jobs:
           platform: "amd64"
           labels: ${{ needs.prepare.outputs.labels }}
           version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ SCAN_REGISTRY }}
+          registry: ${{ env.SCAN_REGISTRY }}
           repository: ${{ secrets.RHCC_REPOSITORY }}
       - name: Run preflight
         uses: ./.github/actions/preflight
         with:
           version: ${{ needs.prepare.outputs.version }}
-          registry: ${{ SCAN_REGISTRY }}
+          registry: ${{ env.SCAN_REGISTRY }}
           repository: ${{ secrets.RHCC_REPOSITORY }}
           report-name: "preflight.json"
           redhat-project-id: ${{ secrets.REDHAT_PROJECT_ID }}
